@@ -77,7 +77,7 @@ public readonly record struct OpResult<T>
             return OpResult<U>.Ok(value);
         
         result.TryGetError(out var error);
-        return OpResult<U>.Err(error);
+        return OpResult<U>.Err(error!);
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public readonly record struct OpResult<T>
             return OpResult<T>.Ok(value);
         
         result.TryGetError(out var error);
-        return OpResult<T>.Err(error);
+        return OpResult<T>.Err(error!);
     }
 
     /// <summary>
