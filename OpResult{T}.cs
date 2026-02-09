@@ -73,9 +73,11 @@ public readonly record struct OpResult<T>
     public OpResult<U> Map<U>([DisallowNull] Func<T, U>? map)
     {
         var result = _inner.Map(map);
-        return result.IsOk 
-            ? OpResult<U>.Ok(result.Match(v => v, _ => default(U)!))
-            : OpResult<U>.Err(result.Match(_ => default(OpError), e => e));
+        if (result.TryGetValue(out var value))
+            return OpResult<U>.Ok(value);
+        
+        result.TryGetError(out var error);
+        return OpResult<U>.Err(error);
     }
 
     /// <summary>
@@ -84,9 +86,11 @@ public readonly record struct OpResult<T>
     public OpResult<T> MapErr([DisallowNull] Func<OpError, OpError>? map)
     {
         var result = _inner.MapErr(map);
-        return result.IsOk
-            ? OpResult<T>.Ok(result.Match(v => v, _ => default(T)!))
-            : OpResult<T>.Err(result.Match(_ => default(OpError), e => e));
+        if (result.TryGetValue(out var value))
+            return OpResult<T>.Ok(value);
+        
+        result.TryGetError(out var error);
+        return OpResult<T>.Err(error);
     }
 
     /// <summary>
@@ -97,10 +101,13 @@ public readonly record struct OpResult<T>
         if (bind is null)
             return OpResult<U>.Err(OpError.New("Bind function is null"));
 
-        if (!_inner.IsOk)
-            return OpResult<U>.Err(_inner.Match(_ => default(OpError), e => e));
+        if (_inner.TryGetError(out var error))
+            return OpResult<U>.Err(error);
 
-        return bind(_inner.Match(v => v, _ => default(T)!));
+        if (!_inner.TryGetValue(out var value))
+            return OpResult<U>.Err(OpError.New("Invalid state"));
+
+        return bind(value);
     }
 
     /// <summary>
