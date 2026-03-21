@@ -85,7 +85,9 @@ public readonly record struct OpResult<T, E>
             return OpResult<U, E>.Err(_error);
 
         if (map is null)
-            return OpResult<U, E>.Err(default(E)!);
+#pragma warning disable CS8604 // Per spec: null delegate returns Err with default(E), which may be null
+            return OpResult<U, E>.Err(default(E));
+#pragma warning restore CS8604
 
         return OpResult<U, E>.Ok(map(_value));
     }
@@ -99,7 +101,9 @@ public readonly record struct OpResult<T, E>
             return OpResult<T, F>.Ok(_value);
 
         if (map is null)
-            return OpResult<T, F>.Err(default(F)!);
+#pragma warning disable CS8604 // Per spec: null delegate returns Err with default(F), which may be null
+            return OpResult<T, F>.Err(default(F));
+#pragma warning restore CS8604
 
         return OpResult<T, F>.Err(map(_error));
     }
@@ -113,7 +117,9 @@ public readonly record struct OpResult<T, E>
             return OpResult<U, E>.Err(_error);
 
         if (bind is null)
-            return OpResult<U, E>.Err(default(E)!);
+#pragma warning disable CS8604 // Per spec: null delegate returns Err with default(E), which may be null
+            return OpResult<U, E>.Err(default(E));
+#pragma warning restore CS8604
 
         return bind(_value);
     }

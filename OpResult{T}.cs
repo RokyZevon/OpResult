@@ -95,9 +95,12 @@ public readonly record struct OpResult<T>
                 var outerResult = bind(value);
                 if (outerResult.TryGetValue(out var innerValue))
                     return OpResult<U, OpError>.Ok(innerValue);
-
-                outerResult.TryGetError(out var innerError);
-                return OpResult<U, OpError>.Err(innerError);
+                else
+                {
+                    // outerResult must be Err if not Ok
+                    outerResult.TryGetError(out var innerError);
+                    return OpResult<U, OpError>.Err(innerError);
+                }
             };
 
 #pragma warning disable CS8604 // Null delegate is intentionally passed to inner AndThen per spec

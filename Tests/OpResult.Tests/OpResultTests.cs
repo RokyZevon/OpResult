@@ -192,6 +192,34 @@ public class OpResultTests
     }
 
     [Fact]
+    public void VoidMatch_WithNullOkDelegate_Should_NotExecuteAnyAction()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Ok(42);
+        var errorExecuted = false;
+
+        // Act
+        result.Match(null!, onErr: _ => errorExecuted = true);
+
+        // Assert - neither action should execute when any delegate is null
+        Assert.False(errorExecuted);
+    }
+
+    [Fact]
+    public void VoidMatch_WithNullErrDelegate_Should_NotExecuteAnyAction()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Err("Error");
+        var okExecuted = false;
+
+        // Act
+        result.Match(onOk: _ => okExecuted = true, null!);
+
+        // Assert - neither action should execute when any delegate is null
+        Assert.False(okExecuted);
+    }
+
+    [Fact]
     public void Map_WithNullDelegate_OnOk_Should_ReturnErrWithDefaultE()
     {
         // Arrange
