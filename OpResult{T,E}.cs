@@ -81,10 +81,13 @@ public readonly record struct OpResult<T, E>
     /// </summary>
     public OpResult<U, E> Map<U>([DisallowNull] Func<T, U>? map)
     {
+        if (!_isOk)
+            return OpResult<U, E>.Err(_error);
+
         if (map is null)
             return OpResult<U, E>.Err(default(E)!);
 
-        return _isOk ? OpResult<U, E>.Ok(map(_value)) : OpResult<U, E>.Err(_error);
+        return OpResult<U, E>.Ok(map(_value));
     }
 
     /// <summary>
@@ -92,10 +95,13 @@ public readonly record struct OpResult<T, E>
     /// </summary>
     public OpResult<T, F> MapErr<F>([DisallowNull] Func<E, F>? map)
     {
+        if (_isOk)
+            return OpResult<T, F>.Ok(_value);
+
         if (map is null)
             return OpResult<T, F>.Err(default(F)!);
 
-        return _isOk ? OpResult<T, F>.Ok(_value) : OpResult<T, F>.Err(map(_error));
+        return OpResult<T, F>.Err(map(_error));
     }
 
     /// <summary>
@@ -103,10 +109,13 @@ public readonly record struct OpResult<T, E>
     /// </summary>
     public OpResult<U, E> AndThen<U>([DisallowNull] Func<T, OpResult<U, E>>? bind)
     {
+        if (!_isOk)
+            return OpResult<U, E>.Err(_error);
+
         if (bind is null)
             return OpResult<U, E>.Err(default(E)!);
 
-        return _isOk ? bind(_value) : OpResult<U, E>.Err(_error);
+        return bind(_value);
     }
 
     /// <summary>

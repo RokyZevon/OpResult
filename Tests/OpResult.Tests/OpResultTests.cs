@@ -164,6 +164,122 @@ public class OpResultTests
         Assert.False(result.IsOk);
         Assert.True(result.IsErr);
     }
+
+    [Fact]
+    public void Match_WithNullOkDelegate_Should_ReturnDefault()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Ok(42);
+
+        // Act
+        var output = result.Match(null!, onErr: error => $"Error: {error}");
+
+        // Assert
+        Assert.Null(output);
+    }
+
+    [Fact]
+    public void Match_WithNullErrDelegate_Should_ReturnDefault()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Err("Error");
+
+        // Act
+        var output = result.Match(onOk: value => $"Success: {value}", null!);
+
+        // Assert
+        Assert.Null(output);
+    }
+
+    [Fact]
+    public void Map_WithNullDelegate_OnOk_Should_ReturnErrWithDefaultE()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Ok(42);
+
+        // Act
+        var mapped = result.Map<int>(null!);
+
+        // Assert
+        Assert.True(mapped.IsErr);
+        Assert.True(mapped.TryGetError(out var error));
+        Assert.Null(error); // default(string) is null
+    }
+
+    [Fact]
+    public void Map_WithNullDelegate_OnErr_Should_PreserveError()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Err("Original error");
+
+        // Act
+        var mapped = result.Map<int>(null!);
+
+        // Assert
+        Assert.True(mapped.IsErr);
+        Assert.True(mapped.TryGetError(out var error));
+        Assert.Equal("Original error", error);
+    }
+
+    [Fact]
+    public void MapErr_WithNullDelegate_OnOk_Should_PreserveValue()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Ok(42);
+
+        // Act
+        var mapped = result.MapErr<int>(null!);
+
+        // Assert
+        Assert.True(mapped.IsOk);
+        Assert.True(mapped.TryGetValue(out var value));
+        Assert.Equal(42, value);
+    }
+
+    [Fact]
+    public void MapErr_WithNullDelegate_OnErr_Should_ReturnErrWithDefaultF()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Err("Original error");
+
+        // Act
+        var mapped = result.MapErr<int>(null!);
+
+        // Assert
+        Assert.True(mapped.IsErr);
+        Assert.True(mapped.TryGetError(out var error));
+        Assert.Equal(0, error); // default(int) is 0
+    }
+
+    [Fact]
+    public void AndThen_WithNullDelegate_OnOk_Should_ReturnErrWithDefaultE()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Ok(42);
+
+        // Act
+        var chained = result.AndThen<int>(null!);
+
+        // Assert
+        Assert.True(chained.IsErr);
+        Assert.True(chained.TryGetError(out var error));
+        Assert.Null(error); // default(string) is null
+    }
+
+    [Fact]
+    public void AndThen_WithNullDelegate_OnErr_Should_PreserveError()
+    {
+        // Arrange
+        var result = OpResult<int, string>.Err("Original error");
+
+        // Act
+        var chained = result.AndThen<int>(null!);
+
+        // Assert
+        Assert.True(chained.IsErr);
+        Assert.True(chained.TryGetError(out var error));
+        Assert.Equal("Original error", error);
+    }
 }
 
 /// <summary>
@@ -247,6 +363,86 @@ public class OpResultWithOpErrorTests
         Assert.True(result.IsErr);
         Assert.True(result.TryGetError(out var error));
         Assert.Equal("Error message", error.Message);
+    }
+
+    [Fact]
+    public void Map_WithNullDelegate_OnOk_Should_ReturnErrWithDefaultOpError()
+    {
+        // Arrange
+        var result = OpResult<int>.Ok(42);
+
+        // Act
+        var mapped = result.Map<int>(null!);
+
+        // Assert
+        Assert.True(mapped.IsErr);
+        Assert.True(mapped.TryGetError(out var error));
+        Assert.Null(error.Code);
+        Assert.Null(error.Message);
+    }
+
+    [Fact]
+    public void Map_WithNullDelegate_OnErr_Should_PreserveError()
+    {
+        // Arrange
+        var result = OpResult<int>.Err("ERR001", "Original error");
+
+        // Act
+        var mapped = result.Map<int>(null!);
+
+        // Assert
+        Assert.True(mapped.IsErr);
+        Assert.True(mapped.TryGetError(out var error));
+        Assert.Equal("ERR001", error.Code);
+        Assert.Equal("Original error", error.Message);
+    }
+
+    [Fact]
+    public void MapErr_WithNullDelegate_OnErr_Should_ReturnErrWithDefaultOpError()
+    {
+        // Arrange
+        var result = OpResult<int>.Err("ERR001", "Original error");
+
+        // Act
+        var mapped = result.MapErr(null!);
+
+        // Assert
+        Assert.True(mapped.IsErr);
+        Assert.True(mapped.TryGetError(out var error));
+        Assert.Null(error.Code);
+        Assert.Null(error.Message);
+    }
+
+    [Fact]
+    public void AndThen_WithNullDelegate_OnOk_Should_ReturnErrWithDefaultOpError()
+    {
+        // Arrange
+        var result = OpResult<int>.Ok(42);
+
+        // Act
+        var chained = result.AndThen<int>(null!);
+
+        // Assert
+        Assert.True(chained.IsErr);
+        Assert.True(chained.TryGetError(out var error));
+        Assert.Null(error.Code);
+        Assert.Null(error.Message);
+    }
+
+    [Fact]
+    public void AndThen_WithNullDelegate_OnErr_Should_PreserveError()
+    {
+        // Arrange
+        var result = OpResult<int>.Err("ERR001", "Original error");
+
+        // Act
+        var chained = result.AndThen<int>(null!);
+
+        // Assert
+        Assert.True(chained.IsErr);
+        Assert.True(chained.TryGetError(out var error));
+        Assert.Equal("ERR001", error.Code);
+        Assert.Equal("Original error", error.Message);
     }
 }
 

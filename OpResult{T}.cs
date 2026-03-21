@@ -72,12 +72,7 @@ public readonly record struct OpResult<T>
     /// </summary>
     public OpResult<U> Map<U>([DisallowNull] Func<T, U>? map)
     {
-        var result = _inner.Map(map);
-        if (result.TryGetValue(out var value))
-            return OpResult<U>.Ok(value);
-        
-        result.TryGetError(out var error);
-        return OpResult<U>.Err(error!);
+        return new OpResult<U>(_inner.Map(map));
     }
 
     /// <summary>
@@ -85,12 +80,7 @@ public readonly record struct OpResult<T>
     /// </summary>
     public OpResult<T> MapErr([DisallowNull] Func<OpError, OpError>? map)
     {
-        var result = _inner.MapErr(map);
-        if (result.TryGetValue(out var value))
-            return OpResult<T>.Ok(value);
-        
-        result.TryGetError(out var error);
-        return OpResult<T>.Err(error!);
+        return new OpResult<T>(_inner.MapErr(map));
     }
 
     /// <summary>
@@ -98,16 +88,21 @@ public readonly record struct OpResult<T>
     /// </summary>
     public OpResult<U> AndThen<U>([DisallowNull] Func<T, OpResult<U>>? bind)
     {
-        if (bind is null)
-            return OpResult<U>.Err(OpError.New("Bind function is null"));
+        Func<T, OpResult<U, OpError>>? innerBind = bind is null
+            ? null
+            : value =>
+            {
+                var outerResult = bind(value);
+                if (outerResult.TryGetValue(out var innerValue))
+                    return OpResult<U, OpError>.Ok(innerValue);
 
-        if (_inner.TryGetError(out var error))
-            return OpResult<U>.Err(error);
+                outerResult.TryGetError(out var innerError);
+                return OpResult<U, OpError>.Err(innerError);
+            };
 
-        if (!_inner.TryGetValue(out var value))
-            return OpResult<U>.Err(OpError.New("Invalid state"));
-
-        return bind(value);
+#pragma warning disable CS8604 // Null delegate is intentionally passed to inner AndThen per spec
+        return new OpResult<U>(_inner.AndThen(innerBind));
+#pragma warning restore CS8604
     }
 
     /// <summary>
