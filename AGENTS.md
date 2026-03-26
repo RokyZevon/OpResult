@@ -31,13 +31,13 @@ dotnet test
 
 - 便捷类型。内部组合 `OpResult<T, OpError>`（委托，非继承）。
 - 暴露与 `OpResult<T, E>` 完全相同的 API 表面。
-- 额外工厂方法：`Err(string message)`、`Err(string code, string message)`。
+- 工厂方法：`Ok(T value)`、`Err(OpError error)`。
 
 ### `OpError`
 
 - `readonly record struct OpError(string Code, string Message)`。
 - 内置轻量错误类型。实现 `IOpError`。
-- 工厂：`OpError.New(string code, string message)`、`OpError.New(string message)`（Code 默认为 `""`）。
+- 工厂：`OpError.Create(string code, string message)`、`OpError.Create(string message)`（Code 默认为 `""`）。
 
 ### `IOpError`
 

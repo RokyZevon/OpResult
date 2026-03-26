@@ -332,7 +332,7 @@ public class OpResultWithOpErrorTests
     public void Err_WithMessage_Should_CreateErrorResult()
     {
         // Arrange & Act
-        var result = OpResult<int>.Err("Something went wrong");
+        var result = OpResult<int>.Err(OpError.Create("Something went wrong"));
 
         // Assert
         Assert.True(result.IsErr);
@@ -345,7 +345,7 @@ public class OpResultWithOpErrorTests
     public void Err_WithCodeAndMessage_Should_CreateErrorResult()
     {
         // Arrange & Act
-        var result = OpResult<int>.Err("ERR001", "Something went wrong");
+        var result = OpResult<int>.Err(OpError.Create("ERR001", "Something went wrong"));
 
         // Assert
         Assert.True(result.IsErr);
@@ -385,7 +385,7 @@ public class OpResultWithOpErrorTests
     public void StaticFactory_Err_Should_CreateResult()
     {
         // Arrange & Act
-        var result = OpResult.Err<int>("Error message");
+        var result = OpResult.Err<int>(OpError.Create("Error message"));
 
         // Assert
         Assert.True(result.IsErr);
@@ -413,7 +413,7 @@ public class OpResultWithOpErrorTests
     public void Map_WithNullDelegate_OnErr_Should_PreserveError()
     {
         // Arrange
-        var result = OpResult<int>.Err("ERR001", "Original error");
+        var result = OpResult<int>.Err(OpError.Create("ERR001", "Original error"));
 
         // Act
         var mapped = result.Map<int>(null!);
@@ -429,7 +429,7 @@ public class OpResultWithOpErrorTests
     public void MapErr_WithNullDelegate_OnErr_Should_ReturnErrWithDefaultOpError()
     {
         // Arrange
-        var result = OpResult<int>.Err("ERR001", "Original error");
+        var result = OpResult<int>.Err(OpError.Create("ERR001", "Original error"));
 
         // Act
         var mapped = result.MapErr(null!);
@@ -461,7 +461,7 @@ public class OpResultWithOpErrorTests
     public void AndThen_WithNullDelegate_OnErr_Should_PreserveError()
     {
         // Arrange
-        var result = OpResult<int>.Err("ERR001", "Original error");
+        var result = OpResult<int>.Err(OpError.Create("ERR001", "Original error"));
 
         // Act
         var chained = result.AndThen<int>(null!);
@@ -483,7 +483,7 @@ public class OpErrorTests
     public void New_WithCodeAndMessage_Should_CreateError()
     {
         // Arrange & Act
-        var error = OpError.New("ERR001", "Something went wrong");
+        var error = OpError.Create("ERR001", "Something went wrong");
 
         // Assert
         Assert.Equal("ERR001", error.Code);
@@ -494,7 +494,7 @@ public class OpErrorTests
     public void New_WithMessage_Should_CreateErrorWithEmptyCode()
     {
         // Arrange & Act
-        var error = OpError.New("Something went wrong");
+        var error = OpError.Create("Something went wrong");
 
         // Assert
         Assert.Equal(string.Empty, error.Code);
@@ -505,7 +505,7 @@ public class OpErrorTests
     public void OpError_Should_ImplementIOpError()
     {
         // Arrange & Act
-        var error = OpError.New("TEST", "Test message");
+        var error = OpError.Create("TEST", "Test message");
         IOpError iError = error;
 
         // Assert

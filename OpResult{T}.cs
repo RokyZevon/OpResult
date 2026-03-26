@@ -36,16 +36,6 @@ public readonly record struct OpResult<T>
     public static OpResult<T> Err(OpError error) => new(OpResult<T, OpError>.Err(error));
 
     /// <summary>
-    /// Creates an Err result with the specified message.
-    /// </summary>
-    public static OpResult<T> Err(string message) => new(OpResult<T, OpError>.Err(OpError.New(message)));
-
-    /// <summary>
-    /// Creates an Err result with the specified code and message.
-    /// </summary>
-    public static OpResult<T> Err(string code, string message) => new(OpResult<T, OpError>.Err(OpError.New(code, message)));
-
-    /// <summary>
     /// Implicitly converts a value to an Ok result.
     /// </summary>
     public static implicit operator OpResult<T>(T value) => Ok(value);
