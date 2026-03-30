@@ -162,3 +162,149 @@ public readonly record struct OpResult<T, E>
         return false;
     }
 }
+
+/// <summary>
+/// Convenience wrapper for OpResult&lt;T, OpError&gt; with the same API surface.
+/// </summary>
+/// <typeparam name="T">The type of the success value.</typeparam>
+public readonly record struct OpResult<T>
+{
+    private readonly OpResult<T, OpError> _inner;
+
+    private OpResult(OpResult<T, OpError> inner)
+    {
+        _inner = inner;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this is an Ok result.
+    /// </summary>
+    public bool IsOk => _inner.IsOk;
+
+    /// <summary>
+    /// Gets a value indicating whether this is an Err result.
+    /// </summary>
+    public bool IsErr => _inner.IsErr;
+
+    /// <summary>
+    /// Creates an Ok result with the specified value.
+    /// </summary>
+    public static OpResult<T> Ok(T value) => new(OpResult<T, OpError>.Ok(value));
+
+    /// <summary>
+    /// Creates an Err result with the specified error.
+    /// </summary>
+    public static OpResult<T> Err(OpError error) => new(OpResult<T, OpError>.Err(error));
+
+    /// <summary>
+    /// Implicitly converts a value to an Ok result.
+    /// </summary>
+    public static implicit operator OpResult<T>(T value) => Ok(value);
+
+    /// <summary>
+    /// Implicitly converts an OpError to an Err result.
+    /// </summary>
+    public static implicit operator OpResult<T>(OpError error) => Err(error);
+
+    /// <summary>
+    /// Matches the result and returns a value based on whether it's Ok or Err.
+    /// </summary>
+    public TOut Match<TOut>([DisallowNull] Func<T, TOut>? onOk, [DisallowNull] Func<OpError, TOut>? onErr)
+        => _inner.Match(onOk, onErr);
+
+    /// <summary>
+    /// Matches the result and executes an action based on whether it's Ok or Err.
+    /// </summary>
+    public void Match([DisallowNull] Action<T>? onOk, [DisallowNull] Action<OpError>? onErr)
+        => _inner.Match(onOk, onErr);
+
+    /// <summary>
+    /// Transforms the Ok value using the provided function.
+    /// </summary>
+    public OpResult<U> Map<U>([DisallowNull] Func<T, U>? map)
+    {
+        return new OpResult<U>(_inner.Map(map));
+    }
+
+    /// <summary>
+    /// Transforms the Err value using the provided function.
+    /// </summary>
+    public OpResult<T> MapErr([DisallowNull] Func<OpError, OpError>? map)
+    {
+        return new OpResult<T>(_inner.MapErr(map));
+    }
+
+    /// <summary>
+    /// Chains fallible operations.
+    /// </summary>
+    public OpResult<U> AndThen<U>([DisallowNull] Func<T, OpResult<U>>? bind)
+    {
+        // Avoid allocating a closure - handle null delegate case directly
+        if (bind is null)
+        {
+#pragma warning disable CS8625 // Null literal is intentionally passed to inner AndThen per spec
+#pragma warning disable CS8604 // Null delegate is intentionally passed to inner AndThen per spec
+            return new OpResult<U>(_inner.AndThen<U>(null));
+#pragma warning restore CS8604
+#pragma warning restore CS8625
+        }
+
+        // Manually chain without allocating: check inner result and call bind if Ok
+        if (!_inner.TryGetValue(out var value))
+        {
+            _inner.TryGetError(out var error);
+            return OpResult<U>.Err(error);
+        }
+
+#pragma warning disable CS8604 // value may be null per [MaybeNull] but bind handles it
+        var outerResult = bind(value);
+#pragma warning restore CS8604
+        if (outerResult.TryGetValue(out var innerValue))
+        {
+#pragma warning disable CS8604 // innerValue may be null per [MaybeNull] but Ok handles it
+            return OpResult<U>.Ok(innerValue);
+#pragma warning restore CS8604
+        }
+
+        outerResult.TryGetError(out var innerError);
+        return OpResult<U>.Err(innerError);
+    }
+
+    /// <summary>
+    /// Tries to get the Ok value.
+    /// </summary>
+    public bool TryGetValue([MaybeNull] out T value)
+        => _inner.TryGetValue(out value);
+
+    /// <summary>
+    /// Tries to get the Err value.
+    /// </summary>
+    public bool TryGetError([MaybeNull] out OpError error)
+        => _inner.TryGetError(out error);
+}
+
+/// <summary>
+/// Static factory helper class for creating OpResult instances without specifying type parameters.
+/// </summary>
+public static class OpResult
+{
+    /// <summary>
+    /// Creates an Ok result with the specified value for OpResult&lt;T&gt;.
+    /// </summary>
+    public static OpResult<T> Ok<T>(T value) => OpResult<T>.Ok(value);
+
+    /// <summary>
+    /// Creates an Ok result with the specified value for OpResult&lt;T, E&gt;.
+    /// </summary>
+    public static OpResult<T, E> Ok<T, E>(T value) => OpResult<T, E>.Ok(value);
+
+    /// <summary>
+    /// Creates an Err result with the specified error for OpResult&lt;T&gt;.
+    /// </summary>
+    public static OpResult<T> Err<T>(OpError error) => OpResult<T>.Err(error);
+
+    /// <summary>
+    /// Creates an Err result with the specified error for OpResult&lt;T, E&gt;.
+    /// </summary>
+    public static OpResult<T, E> Err<T, E>(E error) => OpResult<T, E>.Err(error);
+}

@@ -480,7 +480,7 @@ public class OpResultWithOpErrorTests
 public class OpErrorTests
 {
     [Fact]
-    public void New_WithCodeAndMessage_Should_CreateError()
+    public void Create_WithCodeAndMessage_Should_CreateError()
     {
         // Arrange & Act
         var error = OpError.Create("ERR001", "Something went wrong");
@@ -491,7 +491,7 @@ public class OpErrorTests
     }
 
     [Fact]
-    public void New_WithMessage_Should_CreateErrorWithEmptyCode()
+    public void Create_WithMessage_Should_CreateErrorWithEmptyCode()
     {
         // Arrange & Act
         var error = OpError.Create("Something went wrong");
