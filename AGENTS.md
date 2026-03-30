@@ -110,4 +110,5 @@ dotnet test
 | `OpResult.csproj` | 项目文件，`net6.0` 目标 |
 | `IOpError.cs` | `IOpError` 接口 |
 | `OpError.cs` | `OpError` readonly record struct |
-| `OpResult.cs` | 所有 `OpResult` 类型：`OpResult<T, E>`、`OpResult<T>` 和静态工厂类 |
+| `OpResult.cs` | 所有 `OpResult` 泛型类型：`OpResult<T, E>` 和 `OpResult<T>` |
+| `Results.cs` | 静态工厂辅助类 |

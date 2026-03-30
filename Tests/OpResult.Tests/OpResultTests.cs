@@ -373,7 +373,7 @@ public class OpResultWithOpErrorTests
     public void StaticFactory_Ok_Should_CreateResult()
     {
         // Arrange & Act
-        var result = OpResult.Ok(42);
+        var result = Results.Ok(42);
 
         // Assert
         Assert.True(result.IsOk);
@@ -385,7 +385,7 @@ public class OpResultWithOpErrorTests
     public void StaticFactory_Err_Should_CreateResult()
     {
         // Arrange & Act
-        var result = OpResult.Err<int>(OpError.Create("Error message"));
+        var result = Results.Err<int>(OpError.Create("Error message"));
 
         // Assert
         Assert.True(result.IsErr);
