@@ -34,12 +34,16 @@ public readonly record struct OpResult<T, E>
     /// <summary>
     /// Creates an Ok result with the specified value.
     /// </summary>
-    public static OpResult<T, E> Ok(T value) => new(true, value, default(E)!);
+#pragma warning disable CS8604 // Per spec: inactive error field in Ok may be default(E), which may be null
+    public static OpResult<T, E> Ok(T value) => new(true, value, default(E));
+#pragma warning restore CS8604
 
     /// <summary>
     /// Creates an Err result with the specified error.
     /// </summary>
-    public static OpResult<T, E> Err(E error) => new(false, default(T)!, error);
+#pragma warning disable CS8604 // Per spec: inactive value field in Err may be default(T), which may be null
+    public static OpResult<T, E> Err(E error) => new(false, default(T), error);
+#pragma warning restore CS8604
 
     /// <summary>
     /// Implicitly converts a value to an Ok result.
@@ -57,7 +61,11 @@ public readonly record struct OpResult<T, E>
     public TOut Match<TOut>([DisallowNull] Func<T, TOut>? onOk, [DisallowNull] Func<E, TOut>? onErr)
     {
         if (onOk is null || onErr is null)
-            return default(TOut)!;
+        {
+#pragma warning disable CS8603 // Intentionally returning default(TOut) when delegates are null
+            return default;
+#pragma warning restore CS8603
+        }
 
         return _isOk ? onOk(_value) : onErr(_error);
     }
@@ -128,7 +136,7 @@ public readonly record struct OpResult<T, E>
     /// Tries to get the Ok value.
     /// </summary>
     /// <returns>true if Ok, false if Err.</returns>
-    public bool TryGetValue([MaybeNullWhen(false)] out T value)
+    public bool TryGetValue([MaybeNull] out T value)
     {
         if (_isOk)
         {
@@ -143,7 +151,7 @@ public readonly record struct OpResult<T, E>
     /// Tries to get the Err value.
     /// </summary>
     /// <returns>true if Err, false if Ok.</returns>
-    public bool TryGetError([MaybeNullWhen(false)] out E error)
+    public bool TryGetError([MaybeNull] out E error)
     {
         if (!_isOk)
         {
