@@ -39,4 +39,126 @@ public static class OpResults
     public static OpResult<T> Err<T>(string? message)
         where T : notnull =>
         OpResult<T>.Err(OpError.New(message));
+
+    private const string NullOperationResultMessage = "Operation returned null.";
+
+    /// <summary>
+    /// Invokes an action and converts non-cancellation exceptions to a failed result.
+    /// </summary>
+    /// <param name="action">The action to invoke.</param>
+    /// <returns>A successful result when the action completes; otherwise, a failed result with the exception message.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="action"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OperationCanceledException">The invoked operation throws a cancellation exception.</exception>
+    public static OpResult TryInvoke(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        try
+        {
+            action();
+            return Ok();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return Err(exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Invokes a function and converts non-cancellation exceptions or null return values to a failed result.
+    /// </summary>
+    /// <typeparam name="T">The type of the value carried by a successful result.</typeparam>
+    /// <param name="func">The function to invoke.</param>
+    /// <returns>A successful result when the function returns a non-null value; otherwise, a failed result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="func"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OperationCanceledException">The invoked operation throws a cancellation exception.</exception>
+    public static OpResult<T> TryInvoke<T>(Func<T> func)
+        where T : notnull
+    {
+        ArgumentNullException.ThrowIfNull(func);
+
+        try
+        {
+            var value = func();
+            return value is null ? Err<T>(NullOperationResultMessage) : Ok(value);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return Err<T>(exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Invokes an asynchronous action and converts non-cancellation exceptions or null tasks to a failed result.
+    /// </summary>
+    /// <param name="action">The asynchronous action to invoke.</param>
+    /// <returns>A successful result when the action task completes; otherwise, a failed result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="action"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OperationCanceledException">The invoked operation throws a cancellation exception.</exception>
+    public static async Task<OpResult> TryInvokeAsync(Func<Task> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        try
+        {
+            var task = action();
+            if (task is null)
+            {
+                return Err(NullOperationResultMessage);
+            }
+
+            await task.ConfigureAwait(false);
+            return Ok();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return Err(exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Invokes an asynchronous function and converts non-cancellation exceptions, null tasks, or null return values to a failed result.
+    /// </summary>
+    /// <typeparam name="T">The type of the value carried by a successful result.</typeparam>
+    /// <param name="func">The asynchronous function to invoke.</param>
+    /// <returns>A successful result when the function task returns a non-null value; otherwise, a failed result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="func"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OperationCanceledException">The invoked operation throws a cancellation exception.</exception>
+    public static async Task<OpResult<T>> TryInvokeAsync<T>(Func<Task<T>> func)
+        where T : notnull
+    {
+        ArgumentNullException.ThrowIfNull(func);
+
+        try
+        {
+            var task = func();
+            if (task is null)
+            {
+                return Err<T>(NullOperationResultMessage);
+            }
+
+            var value = await task.ConfigureAwait(false);
+            return value is null ? Err<T>(NullOperationResultMessage) : Ok(value);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return Err<T>(exception.Message);
+        }
+    }
 }

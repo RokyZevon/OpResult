@@ -31,6 +31,28 @@ OpResults.Err<T>(message) // OpResult<T>
 
 `OpResults.Err(...)` does not return `OpError`, and `OpError` does not implicitly convert to `OpResult` or `OpResult<T>`.
 
+## TryInvoke
+
+Use `TryInvoke` when code at an exception boundary should be folded into `OpResult`:
+
+```csharp
+OpResult written = OpResults.TryInvoke(
+    () => File.WriteAllText(path, text));
+
+OpResult<User> loaded = OpResults.TryInvoke(
+    () => repository.LoadUser(id));
+
+OpResult saved = await OpResults.TryInvokeAsync(
+    () => repository.SaveAsync(user, cancellationToken));
+
+OpResult<User> fetched = await OpResults.TryInvokeAsync(
+    () => repository.LoadUserAsync(id, cancellationToken));
+```
+
+Non-cancellation exceptions become `Err(exception.Message)`. Cancellation exceptions propagate. If an adapted value-returning operation returns `null`, or an async operation returns a `null` task, the result is `Err("Operation returned null.")`.
+
+Use lambdas or closures to pass arguments or cancellation tokens to the adapted operation.
+
 ## Consuming Branches
 
 Use `IsOk` / `IsErr` for branch checks, and use `Then` / `Match` to express workflow and final consumption.
@@ -81,4 +103,4 @@ public async Task<OpResult<User>> GetUserAsync(Guid userId)
 ## v0.1.0 Boundaries
 
 - Successful payloads are non-null by design. `OpResult<User?>` and `OpResults.Ok<User?>(null)` are out of scope.
-- `TryInvoke` is not part of the current core API.
+- `TryInvoke` covers exception-boundary adapters for `Action`, `Func<T>`, `Func<Task>`, and `Func<Task<T>>`.

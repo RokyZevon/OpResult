@@ -31,6 +31,28 @@ OpResults.Err<T>(message) // OpResult<T>
 
 `OpResults.Err(...)` 不返回 `OpError`，`OpError` 也不提供到 `OpResult` 或 `OpResult<T>` 的隐式转换。
 
+## TryInvoke
+
+当异常边界代码需要折叠成 `OpResult` 时，使用 `TryInvoke`：
+
+```csharp
+OpResult written = OpResults.TryInvoke(
+    () => File.WriteAllText(path, text));
+
+OpResult<User> loaded = OpResults.TryInvoke(
+    () => repository.LoadUser(id));
+
+OpResult saved = await OpResults.TryInvokeAsync(
+    () => repository.SaveAsync(user, cancellationToken));
+
+OpResult<User> fetched = await OpResults.TryInvokeAsync(
+    () => repository.LoadUserAsync(id, cancellationToken));
+```
+
+非取消异常会转成 `Err(exception.Message)`。取消异常会继续传播。若被适配的有值操作返回 `null`，或异步操作返回 null task，结果为 `Err("Operation returned null.")`。
+
+需要传入参数或 cancellation token 时，使用 lambda / 闭包传给实际业务方法。
+
 ## 分支消费
 
 推荐使用 `IsOk` / `IsErr` 做分支判断，并用 `Then` / `Match` 表达流程与最终消费。
@@ -81,4 +103,4 @@ public async Task<OpResult<User>> GetUserAsync(Guid userId)
 ## v0.1.0 边界
 
 - 成功载荷按 non-null 设计，不支持把 `OpResult<User?>` 或 `OpResults.Ok<User?>(null)` 作为成功模型。
-- `TryInvoke` 不属于当前核心 API。
+- `TryInvoke` 覆盖 `Action`、`Func<T>`、`Func<Task>` 与 `Func<Task<T>>` 的异常边界适配。
