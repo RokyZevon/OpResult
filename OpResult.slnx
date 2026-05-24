@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="OpResult/OpResult.csproj" />
+  <Project Path="OpResult.Tests/OpResult.Tests.csproj" />
+</Solution>
