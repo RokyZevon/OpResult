@@ -105,4 +105,4 @@ public async Task<OpResult<User>> GetUserAsync(Guid userId)
 - 成功载荷按 non-null 设计，不支持把 `OpResult<User?>` 或 `OpResults.Ok<User?>(null)` 作为成功模型。
 - `TryInvoke` 覆盖 `Action`、`Func<T>`、`Func<Task>` 与 `Func<Task<T>>` 的异常边界适配。
 
-维护者发布说明见 `/docs/maintainers/release-publish-nuget.zh.md`。
+维护者发布说明见 `https://github.com/RokyZevon/OpResult/blob/main/docs/maintainers/release-publish-nuget.zh.md`。

@@ -105,4 +105,4 @@ public async Task<OpResult<User>> GetUserAsync(Guid userId)
 - Successful payloads are non-null by design. `OpResult<User?>` and `OpResults.Ok<User?>(null)` are out of scope.
 - `TryInvoke` covers exception-boundary adapters for `Action`, `Func<T>`, `Func<Task>`, and `Func<Task<T>>`.
 
-Maintainer release/publish notes are in `/docs/maintainers/release-publish-nuget.md`.
+Maintainer release/publish notes are in `https://github.com/RokyZevon/OpResult/blob/main/docs/maintainers/release-publish-nuget.md`.
