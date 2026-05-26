@@ -5,7 +5,7 @@ This repository includes `.github/workflows/publish-nuget.yml` and follows GitHu
 - Trigger: when a GitHub Release is published (`release.published`), or manually by `workflow_dispatch`.
 - Auth: publish with `GITHUB_TOKEN` (no hardcoded PAT in repository files).
 - Permissions: workflow uses `packages: write`.
-- Source: `https://nuget.pkg.github.com/RokyZevon/index.json`.
+- Push: `dotnet nuget push` directly to `https://nuget.pkg.github.com/<OWNER>/index.json` (no persisted credentials via `nuget add source`).
 
 ## v0.1.0 release steps
 
@@ -16,4 +16,5 @@ This repository includes `.github/workflows/publish-nuget.yml` and follows GitHu
 ## When manual intervention may be required
 
 - If package publish fails due to permissions, confirm repository **Actions** has permission to create and publish packages, and `GITHUB_TOKEN` has package write access.
+- In repo **Settings → Actions → General → Workflow permissions**, ensure **Read and write permissions** is enabled (so the workflow `packages: write` permission can take effect).
 - If your org/account restricts package visibility or workflow access inheritance, adjust package access settings in GitHub Packages so this repository workflow can publish/read as needed.
