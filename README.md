@@ -4,7 +4,7 @@ OpResult is a small .NET Result Pattern library for explicit `Ok`/`Err` business
 
 ## Core Types
 
-v0.1.0 treats both result containers as first-class types:
+OpResult treats both result containers as first-class types:
 
 - `OpResult`: for operations without a success payload.
 - `OpResult<T>`: for operations with a non-null success payload (`where T : notnull`).
@@ -100,9 +100,7 @@ public async Task<OpResult<User>> GetUserAsync(Guid userId)
 }
 ```
 
-## v0.1.0 Boundaries
+## Boundaries
 
 - Successful payloads are non-null by design. `OpResult<User?>` and `OpResults.Ok<User?>(null)` are out of scope.
 - `TryInvoke` covers exception-boundary adapters for `Action`, `Func<T>`, `Func<Task>`, and `Func<Task<T>>`.
-
-Maintainer release/publish notes are in `https://github.com/RokyZevon/OpResult/blob/main/docs/maintainers/release-publish-nuget.md`.
