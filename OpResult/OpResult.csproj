@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
 
-    <PackageId>OpResult</PackageId>
+    <PackageId>RokyZevon.OpResult</PackageId>
     <Version>0.1.0</Version>
     <Title>OpResult</Title>
     <Authors>RokyZevon</Authors>

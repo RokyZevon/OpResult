@@ -87,6 +87,6 @@ jobs:
 
       - name: Publish to nuget.org
         run: |
-          dotnet nuget push "./artifacts/packages/OpResult.${{ env.PACKAGE_VERSION }}.nupkg" \
+          dotnet nuget push "./artifacts/packages/RokyZevon.OpResult.${{ env.PACKAGE_VERSION }}.nupkg" \
             --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
             --source "https://api.nuget.org/v3/index.json"
