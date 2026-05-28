@@ -5,6 +5,28 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <PackageId>OpResult</PackageId>
+    <Version>0.1.0</Version>
+    <Title>OpResult</Title>
+    <Authors>RokyZevon</Authors>
+    <Company>RokyZevon</Company>
+    <Product>OpResult</Product>
+    <Copyright>Copyright (c) 2026 RokyZevon</Copyright>
+    <Description>A small .NET Result Pattern library for explicit Ok and Err business flows.</Description>
+    <PackageTags>result;result-pattern;error-handling;dotnet;csharp</PackageTags>
+    <PackageProjectUrl>https://github.com/RokyZevon/OpResult</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/RokyZevon/OpResult</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
 
 </Project>
