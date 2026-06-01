@@ -19,7 +19,24 @@ dotnet add package RokyZevon.OpResult
 
 ## 快速开始
 
-让可能失败的操作返回 `OpResult<T>`，用 `ThenAsync` 串联异步且会产生 result 的步骤；如果最终分支映射是同步逻辑，先 `await` pipeline，再使用 `Match`。
+让可能失败的操作返回 `OpResult<T>`。传统 .NET 短路风格可以先用 `IsErr` 或 `IsOk` 做 guard，再在已确认的分支上直接读取 `Error` 或 `Value`。
+
+```csharp
+public string GetUserDisplayName(Guid userId)
+{
+    OpResult<User> result = FindUser(userId);
+
+    if (result.IsErr)
+    {
+        return $"Could not load user: {result.Error.Message}";
+    }
+
+    User user = result.Value;
+    return $"Loaded {user.DisplayName}.";
+}
+```
+
+多步骤工作流可以用 `ThenAsync` 串联异步且会产生 result 的步骤；如果最终分支映射是同步逻辑，先 `await` pipeline，再使用 `Match`。
 
 ```csharp
 public async Task<string> GetUserDisplayNameAsync(Guid userId)
@@ -49,6 +66,7 @@ Task<OpResult<User>> EnsureActiveAsync(User user) =>
 
 | 使用 | 适合场景 |
 | --- | --- |
+| `IsOk` / `IsErr` + `Value` / `Error` | 使用传统 .NET 分支、early return、短路流程，或局部直接读取成功值或错误详情。 |
 | `Then` / `ThenAsync` | 继续执行另一个可能失败的操作。遇到 `Err` 会短路，不调用后续 continuation。 |
 | `Match` | 当两个分支 handler 都是同步逻辑时，结束工作流。 |
 | `MatchAsync` | 当任一分支 handler 调用异步工作并返回 `Task` 时，结束工作流。 |
@@ -91,6 +109,43 @@ non-null 的 `T` 也可以直接作为成功的 `OpResult<T>` 返回：
 OpResult<int> CountActiveUsers()
 {
     return repository.CountActiveUsers();
+}
+```
+
+### Guard 后读取 Value 和 Error
+
+`Value` 和 `Error` 是用于直接分支处理的一等 API。先检查 result 分支，再读取对应属性。
+
+```csharp
+string FormatUser(Guid userId)
+{
+    OpResult<User> result = FindUser(userId);
+
+    if (result.IsErr)
+    {
+        logger.Warn(result.Error.Message);
+        return "User unavailable.";
+    }
+
+    User user = result.Value;
+    return user.DisplayName;
+}
+```
+
+对于没有成功载荷的 `OpResult`，只在失败分支读取 `Error`：
+
+```csharp
+void SaveAuditOrLog(string text)
+{
+    OpResult saved = SaveAuditLog(text);
+
+    if (saved.IsErr)
+    {
+        logger.Warn(saved.Error.Message);
+        return;
+    }
+
+    logger.Info("Audit log saved.");
 }
 ```
 

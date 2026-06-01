@@ -19,7 +19,24 @@ dotnet add package RokyZevon.OpResult
 
 ## Quick Start
 
-Return `OpResult<T>` from operations that can fail, chain asynchronous result-producing steps with `ThenAsync`, then `await` the pipeline and use `Match` when the final branch mapping is synchronous.
+Return `OpResult<T>` from operations that can fail. For traditional .NET short-circuit flow, guard with `IsErr` or `IsOk`, then read `Error` or `Value` directly on the verified branch.
+
+```csharp
+public string GetUserDisplayName(Guid userId)
+{
+    OpResult<User> result = FindUser(userId);
+
+    if (result.IsErr)
+    {
+        return $"Could not load user: {result.Error.Message}";
+    }
+
+    User user = result.Value;
+    return $"Loaded {user.DisplayName}.";
+}
+```
+
+For multi-step workflows, chain asynchronous result-producing steps with `ThenAsync`, then `await` the pipeline and use `Match` when the final branch mapping is synchronous.
 
 ```csharp
 public async Task<string> GetUserDisplayNameAsync(Guid userId)
@@ -49,6 +66,7 @@ Task<OpResult<User>> EnsureActiveAsync(User user) =>
 
 | Use this | When you need to |
 | --- | --- |
+| `IsOk` / `IsErr` + `Value` / `Error` | Use traditional .NET branching, early returns, short-circuit flow, or direct local access to the success value or error details. |
 | `Then` / `ThenAsync` | Continue to another operation that can fail. `Err` short-circuits and the continuation is not called. |
 | `Match` | Finish the workflow when both branch handlers are synchronous. |
 | `MatchAsync` | Finish the workflow when either branch handler calls asynchronous work and returns `Task`. |
@@ -91,6 +109,43 @@ A non-null `T` can also be returned directly as a successful `OpResult<T>`:
 OpResult<int> CountActiveUsers()
 {
     return repository.CountActiveUsers();
+}
+```
+
+### Reading Value and Error After Guards
+
+`Value` and `Error` are first-class APIs for direct branch handling. Check the result branch first, then read the matching property.
+
+```csharp
+string FormatUser(Guid userId)
+{
+    OpResult<User> result = FindUser(userId);
+
+    if (result.IsErr)
+    {
+        logger.Warn(result.Error.Message);
+        return "User unavailable.";
+    }
+
+    User user = result.Value;
+    return user.DisplayName;
+}
+```
+
+For `OpResult` without a success payload, read `Error` on the failed branch:
+
+```csharp
+void SaveAuditOrLog(string text)
+{
+    OpResult saved = SaveAuditLog(text);
+
+    if (saved.IsErr)
+    {
+        logger.Warn(saved.Error.Message);
+        return;
+    }
+
+    logger.Info("Audit log saved.");
 }
 ```
 
