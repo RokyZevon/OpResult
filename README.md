@@ -1,106 +1,307 @@
 # OpResult
 
-OpResult is a small .NET Result Pattern library for explicit `Ok`/`Err` business flows.
+English | [简体中文](https://github.com/RokyZevon/OpResult/blob/main/README.zh.md)
 
-## Core Types
+OpResult is a small .NET Result Pattern library for explicit `Ok` and `Err` business flows.
 
-v0.1.0 treats both result containers as first-class types:
+It provides two first-class result containers:
 
-- `OpResult`: for operations without a success payload.
-- `OpResult<T>`: for operations with a non-null success payload (`where T : notnull`).
-- `OpError`: an error details object (`Message`), not a result carrier.
+- `OpResult` for operations that either succeed without a payload or fail with an `OpError`.
+- `OpResult<T>` for operations that either succeed with a non-null payload or fail with an `OpError`.
 
-## Factories
+`OpError` carries the public `Message` property. It is an error details object, not a result carrier: `OpResults.Err(...)` returns a result, not an `OpError`, and `OpError` does not implicitly convert to `OpResult` or `OpResult<T>`.
 
-```csharp
-OpResult ok = OpResults.Ok();
-OpResult<int> okValue = OpResults.Ok(42);
+## Installation
 
-OpResult err = OpResults.Err("write failed");
-OpResult<int> errValue = OpResults.Err<int>("count failed");
+```bash
+dotnet add package RokyZevon.OpResult
 ```
 
-Factory shape:
+## Quick Start
+
+Return `OpResult<T>` from operations that can fail, chain asynchronous result-producing steps with `ThenAsync`, then `await` the pipeline and use `Match` when the final branch mapping is synchronous.
 
 ```csharp
-OpResults.Ok()            // OpResult
-OpResults.Ok<T>(value)    // OpResult<T>
-OpResults.Err(message)    // OpResult
-OpResults.Err<T>(message) // OpResult<T>
+public async Task<string> GetUserDisplayNameAsync(Guid userId)
+{
+    OpResult<User> result = await ValidateUserIdAsync(userId)
+        .ThenAsync(() => LoadUserAsync(userId))
+        .ThenAsync(user => EnsureActiveAsync(user));
+
+    return result.Match(
+        onOk: user => $"Loaded {user.DisplayName}.",
+        onErr: error => $"Could not load user: {error.Message}");
+}
+
+Task<OpResult> ValidateUserIdAsync(Guid userId) =>
+    validationService.ValidateUserIdAsync(userId);
+
+Task<OpResult<User>> LoadUserAsync(Guid userId) =>
+    repository.LoadUserAsync(userId);
+
+Task<OpResult<User>> EnsureActiveAsync(User user) =>
+    userPolicy.EnsureActiveAsync(user);
 ```
 
-`OpResults.Err(...)` does not return `OpError`, and `OpError` does not implicitly convert to `OpResult` or `OpResult<T>`.
+## Usage
 
-## TryInvoke
+### Choosing the Right API
 
-Use `TryInvoke` when code at an exception boundary should be folded into `OpResult`:
+| Use this | When you need to |
+| --- | --- |
+| `Then` / `ThenAsync` | Continue to another operation that can fail. `Err` short-circuits and the continuation is not called. |
+| `Match` | Finish the workflow when both branch handlers are synchronous. |
+| `MatchAsync` | Finish the workflow when either branch handler calls asynchronous work and returns `Task`. |
+| `OnOk` / `OnErr` | Run logging, metrics, auditing, or other side effects without changing the result. |
+| `TryInvoke` / `TryInvokeAsync` | Adapt exception-throwing boundary code into `OpResult` / `OpResult<T>`. |
+
+### Creating Results
+
+Use `OpResult` for command-style operations that do not produce a success value:
+
+```csharp
+OpResult SaveAuditLog(string text)
+{
+    if (string.IsNullOrWhiteSpace(text))
+    {
+        return OpResults.Err("Audit text is required.");
+    }
+
+    File.AppendAllText("audit.log", text);
+    return OpResults.Ok();
+}
+```
+
+Use `OpResult<T>` for query-style operations that produce a non-null success value:
+
+```csharp
+OpResult<User> FindUser(Guid id)
+{
+    User? user = repository.Find(id);
+
+    return user is null
+        ? OpResults.Err<User>("User was not found.")
+        : OpResults.Ok(user);
+}
+```
+
+A non-null `T` can also be returned directly as a successful `OpResult<T>`:
+
+```csharp
+OpResult<int> CountActiveUsers()
+{
+    return repository.CountActiveUsers();
+}
+```
+
+### Chaining Steps with Then and ThenAsync
+
+Use `Then` when the next synchronous step can also fail. It runs only after an `Ok` result. If the current result is `Err`, the continuation is not called and the original error message is carried forward.
+
+```csharp
+OpResult SuspendUser(Guid userId)
+{
+    return ValidateUserId(userId)
+        .Then(() => WriteAuditEntry(userId))
+        .Then(() => MarkUserSuspended(userId));
+}
+
+OpResult ValidateUserId(Guid userId) =>
+    userId == Guid.Empty
+        ? OpResults.Err("User id is required.")
+        : OpResults.Ok();
+```
+
+`Then` supports the common void/value transitions:
+
+| Current result | Continuation | Result |
+| --- | --- | --- |
+| `OpResult` | `Func<OpResult>` | `OpResult` |
+| `OpResult` | `Func<OpResult<T>>` | `OpResult<T>` |
+| `OpResult<T>` | `Func<T, OpResult<TNext>>` | `OpResult<TNext>` |
+| `OpResult<T>` | `Func<T, OpResult>` | `OpResult` |
+
+```csharp
+OpResult<User> LoadValidUser(Guid userId)
+{
+    return ValidateUserId(userId)
+        .Then(() => LoadUser(userId));
+}
+
+OpResult<string> LoadDisplayName(Guid userId)
+{
+    return LoadUser(userId)
+        .Then(user => LoadProfile(user.Id))
+        .Then(profile => OpResults.Ok(profile.DisplayName));
+}
+
+OpResult SendWelcomeEmail(Guid userId)
+{
+    return LoadUser(userId)
+        .Then(user => emailSender.SendWelcome(user.Email));
+}
+```
+
+Use `ThenAsync` when the next step returns `Task<OpResult>` or `Task<OpResult<T>>`. You can call it on a direct result or on `Task<OpResult*>` to keep an async pipeline chained.
+
+```csharp
+public Task<OpResult<string>> LoadDisplayNameAsync(Guid userId)
+{
+    return ValidateUserIdAsync(userId)
+        .ThenAsync(() => LoadUserAsync(userId))
+        .ThenAsync(user => LoadProfileAsync(user.Id))
+        .ThenAsync(profile => LoadDisplayNameResultAsync(profile));
+}
+```
+
+The first `ThenAsync` above receives a `Task<OpResult>`. The later calls receive `Task<OpResult<T>>`, so each continuation gets the successful value from the previous step. Every `ThenAsync` continuation returns `Task<OpResult>` or `Task<OpResult<T>>`, including the value-returning `LoadDisplayNameResultAsync` step:
+
+```csharp
+Task<OpResult> ValidateUserIdAsync(Guid userId) =>
+    validationService.ValidateUserIdAsync(userId);
+
+Task<OpResult<string>> LoadDisplayNameResultAsync(UserProfile profile) =>
+    profileStore.LoadDisplayNameResultAsync(profile);
+```
+
+### Consuming Results with Match and MatchAsync
+
+Use `Match` when the workflow is finished and both branches must be handled. Unlike `Then`, `Match` does not continue the business pipeline. It converts the result into a final value or consumes both branches through actions.
+
+Fold a value result into another value:
+
+```csharp
+string response = FindUser(userId).Match(
+    onOk: user => $"Loaded {user.DisplayName}.",
+    onErr: error => $"Could not load user: {error.Message}");
+```
+
+Fold a result without a success payload:
+
+```csharp
+string status = SaveAuditLog(text).Match(
+    onOk: () => "Audit log saved.",
+    onErr: error => $"Audit log failed: {error.Message}");
+```
+
+Consume both branches through actions:
+
+```csharp
+FindUser(userId).Match(
+    onOk: user => logger.Info($"Loaded {user.Id}."),
+    onErr: error => logger.Warn(error.Message));
+```
+
+If the result comes from an asynchronous pipeline but both branch handlers are synchronous, first `await` the pipeline and then call `Match`:
+
+```csharp
+OpResult<User> result = await ValidateUserIdAsync(userId)
+    .ThenAsync(() => LoadUserAsync(userId))
+    .ThenAsync(user => EnsureActiveAsync(user));
+
+string message = result.Match(
+    onOk: user => $"Loaded {user.DisplayName}.",
+    onErr: error => $"Could not load user: {error.Message}");
+```
+
+Use `MatchAsync` when branch handlers are asynchronous and return `Task<TResult>` or `Task`.
+
+```csharp
+string message = await ValidateUserIdAsync(userId)
+    .ThenAsync(() => LoadUserAsync(userId))
+    .ThenAsync(user => EnsureActiveAsync(user))
+    .MatchAsync(
+        onOk: user => FormatLoadedUserAsync(user),
+        onErr: error => FormatLoadErrorAsync(error));
+```
+
+```csharp
+Task<string> FormatLoadedUserAsync(User user) =>
+    localization.FormatAsync("user.loaded", user.DisplayName);
+
+Task<string> FormatLoadErrorAsync(OpError error) =>
+    localization.FormatAsync("user.failed", error.Message);
+```
+
+`MatchAsync` can also consume asynchronous branch actions:
+
+```csharp
+await LoadUserAsync(userId).MatchAsync(
+    onOk: user => WriteLoadedAuditAsync(user),
+    onErr: error => WriteFailedAuditAsync(error));
+```
+
+```csharp
+Task WriteLoadedAuditAsync(User user) =>
+    audit.WriteAsync($"Loaded {user.Id}.");
+
+Task WriteFailedAuditAsync(OpError error) =>
+    audit.WriteAsync($"Failed: {error.Message}");
+```
+
+### Running Side Effects with OnOk and OnErr
+
+Use `OnOk` and `OnErr` for logging, metrics, auditing, and other side effects that should return the original result.
+
+```csharp
+OpResult<User> loaded = LoadUser(userId)
+    .OnOk(user => metrics.Increment("user.loaded"))
+    .OnErr(error => logger.Warn(error.Message));
+```
+
+Asynchronous side effects use `OnOkAsync` and `OnErrAsync`. They also work directly on `Task<OpResult>` and `Task<OpResult<T>>`, so an async workflow can stay chained:
+
+```csharp
+OpResult<User> loaded = await LoadUserAsync(userId)
+    .OnOkAsync(user => audit.WriteAsync($"Loaded {user.Id}."))
+    .OnErrAsync(error => audit.WriteAsync($"Load failed: {error.Message}"));
+```
+
+### Wrapping Exception Boundaries with TryInvoke
+
+Use `TryInvoke` and `TryInvokeAsync` at boundaries where exceptions should become `Err` results.
 
 ```csharp
 OpResult written = OpResults.TryInvoke(
     () => File.WriteAllText(path, text));
 
 OpResult<User> loaded = OpResults.TryInvoke(
-    () => repository.LoadUser(id));
+    () => legacyRepository.LoadUser(userId));
 
 OpResult saved = await OpResults.TryInvokeAsync(
     () => repository.SaveAsync(user, cancellationToken));
 
 OpResult<User> fetched = await OpResults.TryInvokeAsync(
-    () => repository.LoadUserAsync(id, cancellationToken));
+    () => repository.LoadUserAsync(userId, cancellationToken));
 ```
 
-Non-cancellation exceptions become `Err(exception.Message)`. Cancellation exceptions propagate. If an adapted value-returning operation returns `null`, or an async operation returns a `null` task, the result is `Err("Operation returned null.")`.
+`TryInvoke` uses zero-argument delegates. Pass arguments and cancellation tokens through lambdas or closures.
 
-Use lambdas or closures to pass arguments or cancellation tokens to the adapted operation.
+The boundary rules are:
 
-## Consuming Branches
+- A null delegate throws `ArgumentNullException`.
+- A non-cancellation exception becomes `Err(exception.Message)`.
+- A null returned task or null returned payload becomes `Err("Operation returned null.")`.
+- `OperationCanceledException` and derived cancellation exceptions propagate.
 
-Use `IsOk` / `IsErr` for branch checks, and use `Then` / `Match` to express workflow and final consumption.
+## Result Boundaries
+
+Successful payloads are non-null by design. `OpResult<User?>` and `OpResults.Ok<User?>(null)` are outside the supported success model.
+
+`default(OpResult)` and `default(OpResult<T>)` are `Err` results with an empty error message.
+
+Null, empty, and whitespace error messages are normalized to `string.Empty`:
 
 ```csharp
-OpResult result = BeginTransaction()
-    .Then(WriteAuditLog)
-    .Then(CommitTransaction);
+OpResult result = OpResults.Err("   ");
 
-string text = result.Match(
-    onOk: () => "committed",
-    onErr: error => $"failed: {error.Message}");
+Console.WriteLine(result.IsErr);          // True
+Console.WriteLine(result.Error!.Message); // ""
 ```
 
-`Value` and `Error` have runtime fallback behavior:
+Wrong-branch property reads are runtime fallbacks, not control-flow APIs:
 
 - Reading `Value` on an `Err` result returns `default(T)`.
 - Reading `Error` on an `Ok` result returns an empty-message `OpError`.
 
-These fallbacks are runtime guards, not the recommended way to drive control flow.
-Do not use `Value != null`, `Error != null`, or `Error.Message == string.Empty` to decide whether a result is `Ok` or `Err`.
-
-## Async Service-Layer Examples
-
-Use `Task<OpResult>` for command-style operations:
-
-```csharp
-public async Task<OpResult> SuspendUserAsync(Guid userId)
-{
-    return await LoadUserAsync(userId)
-        .ThenAsync(user => EnsureCanSuspendAsync(user))
-        .ThenAsync(() => MarkSuspendedAsync(userId))
-        .OnErrAsync(error => AuditAsync($"suspend failed: {error.Message}"));
-}
-```
-
-Use `Task<OpResult<T>>` for query-style operations:
-
-```csharp
-public async Task<OpResult<User>> GetUserAsync(Guid userId)
-{
-    return await ValidateUserIdAsync(userId)
-        .ThenAsync(() => _repository.GetUserAsync(userId))
-        .OnOkAsync(user => AuditAsync($"loaded: {user.Id}"));
-}
-```
-
-## v0.1.0 Boundaries
-
-- Successful payloads are non-null by design. `OpResult<User?>` and `OpResults.Ok<User?>(null)` are out of scope.
-- `TryInvoke` covers exception-boundary adapters for `Action`, `Func<T>`, `Func<Task>`, and `Func<Task<T>>`.
+Do not use `Value != null`, `Error != null`, or `Error.Message == string.Empty` to decide whether a result is `Ok` or `Err`. Use `IsOk`, `IsErr`, `Then`, or `Match` instead.
