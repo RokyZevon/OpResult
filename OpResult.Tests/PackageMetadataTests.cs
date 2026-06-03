@@ -11,7 +11,7 @@ public sealed class PackageMetadataTests
         var properties = ReadProperties(project);
 
         Assert.Equal("RokyZevon.OpResult", properties["PackageId"]);
-        Assert.Equal("0.1.0", properties["Version"]);
+        Assert.Equal("0.1.1", properties["Version"]);
         Assert.Equal("OpResult", properties["Title"]);
         Assert.Equal("RokyZevon", properties["Authors"]);
         Assert.Equal("RokyZevon", properties["Company"]);

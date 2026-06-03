@@ -9,7 +9,7 @@ OpResult 是一个轻量的 .NET Result Pattern 类库，用显式 `Ok` 和 `Err
 - `OpResult`：用于成功时不携带载荷、失败时携带 `OpError` 的操作。
 - `OpResult<T>`：用于成功时携带 non-null 载荷、失败时携带 `OpError` 的操作。
 
-`OpError` 暴露的 public surface 是 `Message` 属性。它是错误详情对象，不是结果载体：`OpResults.Err(...)` 返回 result，不返回 `OpError`，`OpError` 也不会隐式转换为 `OpResult` 或 `OpResult<T>`。
+`OpError` 暴露的 public surface 是 `Message` 属性。它是由 `OpResults.Err(...)` 创建的错误详情对象，并且可以转换成失败的 `OpResult` 或 `OpResult<T>`。
 
 ## 安装
 
@@ -98,10 +98,12 @@ OpResult<User> FindUser(Guid id)
     User? user = repository.Find(id);
 
     return user is null
-        ? OpResults.Err<User>("User was not found.")
+        ? OpResults.Err("User was not found.")
         : OpResults.Ok(user);
 }
 ```
+
+`OpResults.Err<T>(...)` 仍作为显式兼容写法保留；新代码推荐使用 `OpResults.Err(...)`，由目标 result 类型完成转换。
 
 non-null 的 `T` 也可以直接作为成功的 `OpResult<T>` 返回：
 
