@@ -195,6 +195,8 @@ public static OpResult<T> Err<T>(string? message)
     where T : notnull;
 ```
 
+> Note: This section describes the v0.1.0 published baseline. The Err target-typing behavior is superseded for v0.1.1 by `2026-06-04-err-target-typing-design.md`.
+
 `OpResults.Ok<T>(...)` 和 `T -> OpResult<T>` 成功隐式转换都按 non-null payload 设计。引用类型 null 调用应在 nullable-enabled 调用方产生 Roslyn/LSP warning；如果调用方通过 `null!`、nullable disabled、dynamic 或反射等方式绕过开发期提示，运行时必须在 Ok 构造边界抛出 `ArgumentNullException`，不创建 Ok(null)。
 
 错误路径通过 `OpResults.Err(...)` / `OpResults.Err<T>(...)` 显式表达：

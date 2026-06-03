@@ -36,6 +36,18 @@ public readonly record struct OpResult
     internal static OpResult Ok() => new(true, null);
 
     internal static OpResult Err(OpError error) => new(false, error);
+
+    /// <summary>
+    /// Converts an error to a failed result without a value.
+    /// </summary>
+    /// <param name="error">The error carried by the result.</param>
+    /// <returns>A failed result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="error"/> is <see langword="null"/>.</exception>
+    public static implicit operator OpResult(OpError error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        return Err(error);
+    }
 }
 
 /// <summary>
@@ -95,4 +107,15 @@ public readonly record struct OpResult<T>
     /// <returns>A successful result.</returns>
     public static implicit operator OpResult<T>(T value) => Ok(value);
 
+    /// <summary>
+    /// Converts an error to a failed result.
+    /// </summary>
+    /// <param name="error">The error carried by the result.</param>
+    /// <returns>A failed result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="error"/> is <see langword="null"/>.</exception>
+    public static implicit operator OpResult<T>(OpError error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        return Err(error);
+    }
 }

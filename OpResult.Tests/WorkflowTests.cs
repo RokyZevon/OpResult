@@ -133,7 +133,7 @@ public class WorkflowTests
                     IsFuncOfInputAndReturn(parameters[1].ParameterType, t, typeof(OpResult));
             });
 
-        var errForVoidToVoid = OpResults.Err("void-to-void short-circuit");
+        OpResult errForVoidToVoid = OpResults.Err("void-to-void short-circuit");
         var voidToVoidCalled = false;
         Func<OpResult> voidToVoidContinuation = () =>
         {
@@ -158,7 +158,7 @@ public class WorkflowTests
         Assert.True(voidToVoidOkResult.IsOk);
 
         var thenVoidToValue = thenVoidToValueDefinition.MakeGenericMethod(typeof(int));
-        var errForVoidToValue = OpResults.Err("void-to-value short-circuit");
+        OpResult errForVoidToValue = OpResults.Err("void-to-value short-circuit");
         var voidToValueCalled = false;
         Func<OpResult<int>> voidToValueContinuation = () =>
         {
@@ -431,7 +431,7 @@ public class WorkflowTests
 
         var voidToVoidErrResult = await InvokeWorkflowAsync<OpResult>(
             thenAsyncTaskVoidToVoid,
-            Task.FromResult(OpResults.Err("task-void-to-void short-circuit")),
+            Task.FromResult<OpResult>(OpResults.Err("task-void-to-void short-circuit")),
             voidToVoidContinuation);
 
         Assert.False(voidToVoidErrCalled);
@@ -464,7 +464,7 @@ public class WorkflowTests
 
         var voidToValueErrResult = await InvokeWorkflowAsync<OpResult<int>>(
             thenAsyncTaskVoidToValue,
-            Task.FromResult(OpResults.Err("task-void-to-value short-circuit")),
+            Task.FromResult<OpResult>(OpResults.Err("task-void-to-value short-circuit")),
             voidToValueContinuation);
 
         Assert.False(voidToValueErrCalled);
@@ -834,7 +834,7 @@ public class WorkflowTests
 
         var onOkVoidErrCalled = 0;
         Action onOkVoidErrAction = () => onOkVoidErrCalled++;
-        var errVoidInput = OpResults.Err("onok-void");
+        OpResult errVoidInput = OpResults.Err("onok-void");
         var errVoidReturned = InvokeWorkflow<OpResult>(onOkVoid, errVoidInput, onOkVoidErrAction);
         Assert.Equal(0, onOkVoidErrCalled);
         Assert.Equal(errVoidInput, errVoidReturned);
@@ -870,7 +870,7 @@ public class WorkflowTests
             Assert.Equal("onerr-void", error.Message);
             onErrVoidErrCalled++;
         };
-        var onErrVoidErrInput = OpResults.Err("onerr-void");
+        OpResult onErrVoidErrInput = OpResults.Err("onerr-void");
         var onErrVoidErrReturned = InvokeWorkflow<OpResult>(onErrVoid, onErrVoidErrInput, onErrVoidErrAction);
         Assert.Equal(1, onErrVoidErrCalled);
         Assert.Equal(onErrVoidErrInput, onErrVoidErrReturned);
@@ -902,7 +902,7 @@ public class WorkflowTests
         };
         var onOkAsyncTaskVoidErrReturned = await InvokeWorkflowAsync<OpResult>(
             onOkAsyncTaskVoid,
-            Task.FromResult(OpResults.Err("onokasync-task-void")),
+            Task.FromResult<OpResult>(OpResults.Err("onokasync-task-void")),
             onOkAsyncTaskVoidAction);
         Assert.Equal(0, onOkAsyncTaskVoidCalled);
         Assert.True(onOkAsyncTaskVoidErrReturned.IsErr);
@@ -940,10 +940,10 @@ public class WorkflowTests
             onErrAsyncTaskVoidErrCalled++;
             return Task.CompletedTask;
         };
-        var onErrAsyncTaskVoidErrInput = OpResults.Err("onerrasync-task-void");
+        OpResult onErrAsyncTaskVoidErrInput = OpResults.Err("onerrasync-task-void");
         var onErrAsyncTaskVoidErrReturned = await InvokeWorkflowAsync<OpResult>(
             onErrAsyncTaskVoid,
-            Task.FromResult(onErrAsyncTaskVoidErrInput),
+            Task.FromResult<OpResult>(onErrAsyncTaskVoidErrInput),
             onErrAsyncTaskVoidErrAction);
         Assert.Equal(1, onErrAsyncTaskVoidErrCalled);
         Assert.Equal(onErrAsyncTaskVoidErrInput, onErrAsyncTaskVoidErrReturned);
@@ -1293,7 +1293,8 @@ public class WorkflowTests
         var matchVoidFoldOk = InvokeWorkflow<string>(matchVoidFold, OpResults.Ok(), onOkVoidFold, onErrVoidFold);
         Assert.Equal("ok-void", matchVoidFoldOk);
 
-        var matchVoidFoldErr = InvokeWorkflow<string>(matchVoidFold, OpResults.Err("v"), onOkVoidFold, onErrVoidFold);
+        OpResult matchVoidFoldErrInput = OpResults.Err("v");
+        var matchVoidFoldErr = InvokeWorkflow<string>(matchVoidFold, matchVoidFoldErrInput, onOkVoidFold, onErrVoidFold);
         Assert.Equal("err-v", matchVoidFoldErr);
 
         var matchVoidOnOkCalled = 0;
@@ -1305,7 +1306,8 @@ public class WorkflowTests
         Assert.Equal(1, matchVoidOnOkCalled);
         Assert.Equal(0, matchVoidOnErrCalled);
 
-        InvokeWorkflow(matchVoidAction, OpResults.Err("void-action"), onOkVoidAction, onErrVoidAction);
+        OpResult matchVoidActionErrInput = OpResults.Err("void-action");
+        InvokeWorkflow(matchVoidAction, matchVoidActionErrInput, onOkVoidAction, onErrVoidAction);
         Assert.Equal(1, matchVoidOnOkCalled);
         Assert.Equal(1, matchVoidOnErrCalled);
 
@@ -1357,7 +1359,7 @@ public class WorkflowTests
 
         await InvokeWorkflowAsync(
             matchAsyncTaskVoidAction,
-            Task.FromResult(OpResults.Err("matchasync-void")),
+            Task.FromResult<OpResult>(OpResults.Err("matchasync-void")),
             onOkAsyncVoidAction,
             onErrAsyncVoidAction);
 

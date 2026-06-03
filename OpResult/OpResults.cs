@@ -27,8 +27,8 @@ public static class OpResults
     /// Creates a failed result without a value.
     /// </summary>
     /// <param name="message">The error message. <see langword="null"/> or whitespace messages are normalized to an empty string at run time.</param>
-    /// <returns>A failed result.</returns>
-    public static OpResult Err(string? message) => OpResult.Err(OpError.New(message));
+    /// <returns>An error that can be converted to a failed result.</returns>
+    public static OpError Err(string? message) => OpError.New(message);
 
     /// <summary>
     /// Creates a failed result with success value type <typeparamref name="T"/>.
