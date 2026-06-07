@@ -31,6 +31,14 @@ public static class OpResults
     public static OpError Err(string? message) => OpError.New(message);
 
     /// <summary>
+    /// Creates a failed result error with a direct inner error.
+    /// </summary>
+    /// <param name="message">The error message.</param>
+    /// <param name="innerError">The direct inner error that caused this error, if any.</param>
+    /// <returns>An error that can be converted to a failed result.</returns>
+    public static OpError Err(string? message, OpError? innerError) => OpError.New(message, innerError);
+
+    /// <summary>
     /// Creates a failed result with success value type <typeparamref name="T"/>.
     /// </summary>
     /// <typeparam name="T">The type of the value carried by a successful result.</typeparam>
@@ -64,7 +72,7 @@ public static class OpResults
         }
         catch (Exception exception)
         {
-            return Err(exception.Message);
+            return OpResult.Err(MapException(exception));
         }
     }
 
@@ -92,7 +100,7 @@ public static class OpResults
         }
         catch (Exception exception)
         {
-            return Err<T>(exception.Message);
+            return OpResult<T>.Err(MapException(exception));
         }
     }
 
@@ -124,7 +132,7 @@ public static class OpResults
         }
         catch (Exception exception)
         {
-            return Err(exception.Message);
+            return OpResult.Err(MapException(exception));
         }
     }
 
@@ -158,7 +166,20 @@ public static class OpResults
         }
         catch (Exception exception)
         {
-            return Err<T>(exception.Message);
+            return OpResult<T>.Err(MapException(exception));
         }
+    }
+
+    private static OpError MapException(Exception exception)
+    {
+        var message = string.IsNullOrEmpty(exception.Message)
+            ? exception.GetType().ToString()
+            : $"{exception.GetType()}: {exception.Message}";
+
+        var innerError = exception.InnerException is null
+            ? null
+            : MapException(exception.InnerException);
+
+        return OpError.New(message, innerError);
     }
 }

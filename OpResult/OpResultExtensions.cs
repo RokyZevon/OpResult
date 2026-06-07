@@ -16,7 +16,7 @@ public static class OpResultExtensions
         Func<OpResult> onOk) =>
         result.IsOk
             ? onOk()
-            : OpResults.Err(result.Error.Message);
+            : OpResult.Err(result.Error);
 
     /// <summary>
     /// Continues with a value-result-producing step after a successful result without a value, and short-circuits on failure.
@@ -31,7 +31,7 @@ public static class OpResultExtensions
         where T : notnull =>
         result.IsOk
             ? onOk()
-            : OpResults.Err<T>(result.Error.Message);
+            : OpResult<T>.Err(result.Error);
 
     /// <summary>
     /// Continues with a step that maps a successful value to a new value result, and short-circuits on failure.
@@ -48,7 +48,7 @@ public static class OpResultExtensions
         where TNext : notnull =>
         result.IsOk
             ? onOk(result.Value)
-            : OpResults.Err<TNext>(result.Error.Message);
+            : OpResult<TNext>.Err(result.Error);
 
     /// <summary>
     /// Continues with a result-producing step after a successful value result, and short-circuits on failure.
@@ -63,7 +63,7 @@ public static class OpResultExtensions
         where T : notnull =>
         result.IsOk
             ? onOk(result.Value)
-            : OpResults.Err(result.Error.Message);
+            : OpResult.Err(result.Error);
 
     /// <summary>
     /// Continues with an asynchronous result-producing step after a successful result without a value, and short-circuits on failure.
@@ -76,7 +76,7 @@ public static class OpResultExtensions
         Func<Task<OpResult>> onOk) =>
         result.IsOk
             ? onOk()
-            : Task.FromResult<OpResult>(OpResults.Err(result.Error.Message));
+            : Task.FromResult(OpResult.Err(result.Error));
 
     /// <summary>
     /// Continues with an asynchronous value-result-producing step after a successful result without a value, and short-circuits on failure.
@@ -91,7 +91,7 @@ public static class OpResultExtensions
         where T : notnull =>
         result.IsOk
             ? onOk()
-            : Task.FromResult(OpResults.Err<T>(result.Error.Message));
+            : Task.FromResult(OpResult<T>.Err(result.Error));
 
     /// <summary>
     /// Continues with an asynchronous step that maps a successful value to a new value result, and short-circuits on failure.
@@ -108,7 +108,7 @@ public static class OpResultExtensions
         where TNext : notnull =>
         result.IsOk
             ? onOk(result.Value)
-            : Task.FromResult(OpResults.Err<TNext>(result.Error.Message));
+            : Task.FromResult(OpResult<TNext>.Err(result.Error));
 
     /// <summary>
     /// Continues with an asynchronous result-producing step after a successful value result, and short-circuits on failure.
@@ -123,7 +123,7 @@ public static class OpResultExtensions
         where T : notnull =>
         result.IsOk
             ? onOk(result.Value)
-            : Task.FromResult<OpResult>(OpResults.Err(result.Error.Message));
+            : Task.FromResult(OpResult.Err(result.Error));
 
     /// <summary>
     /// Awaits a result without a value, then continues with an asynchronous result-producing step on success.

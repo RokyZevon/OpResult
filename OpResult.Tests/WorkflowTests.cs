@@ -236,6 +236,29 @@ public class WorkflowTests
     }
 
     [Fact]
+    public void Then_WhenSourceIsErrPreservesOriginalErrorReference()
+    {
+        var originalError = OpResults.Err("database failed").ToErr("get user failed");
+
+        OpResult voidSource = originalError;
+        var voidToVoid = voidSource.Then(() => throw new InvalidOperationException("should not run"));
+        OpResult<int> voidToValue = voidSource.Then<int>(() => throw new InvalidOperationException("should not run"));
+
+        OpResult<int> valueSource = originalError;
+        OpResult<string> valueToValue = valueSource.Then<int, string>(_ => throw new InvalidOperationException("should not run"));
+        OpResult valueToVoid = valueSource.Then<int>(_ => throw new InvalidOperationException("should not run"));
+
+        Assert.True(voidToVoid.IsErr);
+        Assert.Same(originalError, voidToVoid.Error);
+        Assert.True(voidToValue.IsErr);
+        Assert.Same(originalError, voidToValue.Error);
+        Assert.True(valueToValue.IsErr);
+        Assert.Same(originalError, valueToValue.Error);
+        Assert.True(valueToVoid.IsErr);
+        Assert.Same(originalError, valueToVoid.Error);
+    }
+
+    [Fact]
     public void ThenAsync_MatrixSurfaceMatchesSpec()
     {
         var thenAsyncVoidToVoid = FindWorkflowMethod(
@@ -362,6 +385,29 @@ public class WorkflowTests
         Assert.NotNull(thenAsyncTaskVoidToValue);
         Assert.NotNull(thenAsyncTaskValueToValue);
         Assert.NotNull(thenAsyncTaskValueToVoid);
+    }
+
+    [Fact]
+    public async Task ThenAsync_WhenSourceIsErrPreservesOriginalErrorReference()
+    {
+        var originalError = OpResults.Err("database failed").ToErr("get user failed");
+
+        OpResult voidSource = originalError;
+        var voidToVoid = await voidSource.ThenAsync(() => throw new InvalidOperationException("should not run"));
+        var voidToValue = await voidSource.ThenAsync<int>(() => throw new InvalidOperationException("should not run"));
+
+        OpResult<int> valueSource = originalError;
+        var valueToValue = await valueSource.ThenAsync<int, string>(_ => throw new InvalidOperationException("should not run"));
+        var valueToVoid = await valueSource.ThenAsync<int>(_ => throw new InvalidOperationException("should not run"));
+
+        Assert.True(voidToVoid.IsErr);
+        Assert.Same(originalError, voidToVoid.Error);
+        Assert.True(voidToValue.IsErr);
+        Assert.Same(originalError, voidToValue.Error);
+        Assert.True(valueToValue.IsErr);
+        Assert.Same(originalError, valueToValue.Error);
+        Assert.True(valueToVoid.IsErr);
+        Assert.Same(originalError, valueToVoid.Error);
     }
 
     [Fact]

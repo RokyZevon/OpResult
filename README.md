@@ -9,7 +9,7 @@ It provides two first-class result containers:
 - `OpResult` for operations that either succeed without a payload or fail with an `OpError`.
 - `OpResult<T>` for operations that either succeed with a non-null payload or fail with an `OpError`.
 
-`OpError` carries the public `Message` property. It is an error details object produced by `OpResults.Err(...)` and can be converted to a failed `OpResult` or `OpResult<T>`.
+`OpError` carries a public `Message` and optional `InnerError`. It is an error details object produced by `OpResults.Err(...)` and can be converted to a failed `OpResult` or `OpResult<T>`.
 
 ## Installation
 
@@ -151,9 +151,44 @@ void SaveAuditOrLog(string text)
 }
 ```
 
+### Wrapping Errors with InnerError
+
+Use `InnerError` when an outer operation needs to preserve the error from a lower-level operation. After an `IsErr` guard, `result.Error.ToErr(...)` creates a new outer `OpError` and keeps the original error as `InnerError`.
+
+```csharp
+OpResult<UserProfile> LoadProfile(Guid userId)
+{
+    OpResult<User> userResult = LoadUser(userId);
+
+    if (userResult.IsErr)
+    {
+        return userResult.Error.ToErr("Could not load profile.");
+    }
+
+    return profileRepository.Load(userResult.Value.Id);
+}
+```
+
+For one-line display or logging, `ToString()` returns the chain from outer error to inner error and skips empty messages:
+
+```csharp
+OpError error = OpResults.Err("User was not found.")
+    .ToErr("Could not load profile.");
+
+logger.LogError("{Error}", error);
+```
+
+Expected display:
+
+```text
+Could not load profile. -> User was not found.
+```
+
+`ToString()` is for human-readable display, not a stable parsing protocol.
+
 ### Chaining Steps with Then and ThenAsync
 
-Use `Then` when the next synchronous step can also fail. It runs only after an `Ok` result. If the current result is `Err`, the continuation is not called and the original error message is carried forward.
+Use `Then` when the next synchronous step can also fail. It runs only after an `Ok` result. If the current result is `Err`, the continuation is not called and the original `OpError` is carried forward.
 
 ```csharp
 OpResult SuspendUser(Guid userId)
@@ -337,9 +372,16 @@ OpResult<User> fetched = await OpResults.TryInvokeAsync(
 The boundary rules are:
 
 - A null delegate throws `ArgumentNullException`.
-- A non-cancellation exception becomes `Err(exception.Message)`.
+- A non-cancellation exception becomes an `Err` whose message starts with the full exception type name.
+- Inner exceptions are preserved as an `OpError.InnerError` chain.
 - A null returned task or null returned payload becomes `Err("Operation returned null.")`.
 - `OperationCanceledException` and derived cancellation exceptions propagate.
+
+For example, an `InvalidOperationException("outer failed", new ArgumentException("bad user id"))` displays as:
+
+```text
+System.InvalidOperationException: outer failed -> System.ArgumentException: bad user id
+```
 
 ## Result Boundaries
 

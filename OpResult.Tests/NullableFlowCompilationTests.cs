@@ -1,6 +1,7 @@
 namespace OpResult.Tests;
 
 using System.Collections.Immutable;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -120,6 +121,60 @@ public class NullableFlowCompilationTests
             """);
 
         AssertNoUnexpectedErrors(diagnostics);
+    }
+
+    [Fact]
+    public void ErrorToErrInsideIsErrBranchDoesNotWarn()
+    {
+        var diagnostics = CompileSnippet(
+            """
+            OpResult<string> Wrap(OpResult<int> result)
+            {
+                if (result.IsErr)
+                    return result.Error.ToErr("outer failed");
+
+                return OpResults.Ok(result.Value.ToString());
+            }
+
+            _ = Wrap(OpResults.Ok(1));
+            """);
+
+        AssertNoDiagnostic(diagnostics, "CS8604");
+    }
+
+    [Fact]
+    public void ErrorToErrWithoutIsErrBranchWarns()
+    {
+        var diagnostics = CompileSnippet(
+            """
+            OpResult<string> Wrap(OpResult<int> result)
+            {
+                return result.Error.ToErr("outer failed");
+            }
+
+            _ = Wrap(OpResults.Ok(1));
+            """);
+
+        AssertHasDiagnostic(diagnostics, "CS8604");
+    }
+
+    [Fact]
+    public void ErrorToErrInsideIsOkBranchWarns()
+    {
+        var diagnostics = CompileSnippet(
+            """
+            OpResult<string> Wrap(OpResult<int> result)
+            {
+                if (result.IsOk)
+                    return result.Error.ToErr("outer failed");
+
+                return OpResults.Err("already failed");
+            }
+
+            _ = Wrap(OpResults.Ok(1));
+            """);
+
+        AssertHasDiagnostic(diagnostics, "CS8604");
     }
 
     [Fact]

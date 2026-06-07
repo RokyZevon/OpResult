@@ -151,6 +151,98 @@ public class OpResultTests
     }
 
     [Fact]
+    public void Err_WithInnerErrorPreservesInnerError()
+    {
+        var inner = OpResults.Err("user not found");
+
+        var error = OpResults.Err("get user failed", inner);
+
+        Assert.Equal("get user failed", error.Message);
+        Assert.Same(inner, error.InnerError);
+    }
+
+    [Fact]
+    public void Err_WithNullInnerErrorCreatesSingleLayerError()
+    {
+        var error = OpResults.Err("failed", innerError: null);
+
+        Assert.Equal("failed", error.Message);
+        Assert.Null(error.InnerError);
+    }
+
+    [Fact]
+    public void Err_WithInnerErrorNormalizesWhitespaceMessageAndPreservesInnerError()
+    {
+        var inner = OpResults.Err("user not found");
+
+        var error = OpResults.Err(" ", inner);
+
+        Assert.Equal(string.Empty, error.Message);
+        Assert.Same(inner, error.InnerError);
+    }
+
+    [Fact]
+    public void ToErr_WrapsReceiverAsInnerError()
+    {
+        var inner = OpResults.Err("user not found");
+
+        var error = inner.ToErr("get user failed");
+
+        Assert.Equal("get user failed", error.Message);
+        Assert.Same(inner, error.InnerError);
+    }
+
+    [Fact]
+    public void ToErr_NormalizesWhitespaceMessageAndPreservesReceiverAsInnerError()
+    {
+        var inner = OpResults.Err("user not found");
+
+        var error = inner.ToErr(" ");
+
+        Assert.Equal(string.Empty, error.Message);
+        Assert.Same(inner, error.InnerError);
+    }
+
+    [Fact]
+    public void ToErr_WithNullReceiverThrows()
+    {
+        var exception = Assert.Throws<ArgumentNullException>(() =>
+            ((OpError)null!).ToErr("outer"));
+
+        Assert.Equal("innerError", exception.ParamName);
+    }
+
+    [Fact]
+    public void ToString_ReturnsOuterToInnerChain()
+    {
+        var error = OpResults.Err("database failed")
+            .ToErr("get user failed")
+            .ToErr("get profile failed");
+
+        Assert.Equal("get profile failed -> get user failed -> database failed", error.ToString());
+    }
+
+    [Fact]
+    public void ToString_SkipsEmptyMessageNodes()
+    {
+        var error = OpResults.Err("database failed")
+            .ToErr("")
+            .ToErr("get profile failed");
+
+        Assert.Equal("get profile failed -> database failed", error.ToString());
+    }
+
+    [Fact]
+    public void ToString_ReturnsPlaceholderWhenAllMessagesAreEmpty()
+    {
+        var error = OpResults.Err("")
+            .ToErr(null)
+            .ToErr(" ");
+
+        Assert.Equal("<error>", error.ToString());
+    }
+
+    [Fact]
     public void ImplicitValueToOpResultOfT_IsRetainedAndRejectsNull()
     {
         OpResult<string> ok = "ready";
