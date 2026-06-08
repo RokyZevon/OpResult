@@ -29,28 +29,35 @@ public sealed record class OpError
     /// Returns a display string for the error chain from outermost to innermost.
     /// </summary>
     /// <returns>A display string for the error chain.</returns>
-    public override string ToString()
+public override string ToString()
+{
+    if (InnerError is null)
     {
-        var current = this;
-        var builder = new StringBuilder();
+        return string.IsNullOrWhiteSpace(Message) ? "<error>" : Message;
+    }
 
-        while (current is not null)
+    var current = this;
+    StringBuilder? builder = null;
+
+    while (current is not null)
+    {
+        if (!string.IsNullOrWhiteSpace(current.Message))
         {
-            if (!string.IsNullOrWhiteSpace(current.Message))
-            {
-                if (builder.Length > 0)
-                {
-                    builder.Append(" -> ");
-                }
+            builder ??= new StringBuilder();
 
-                builder.Append(current.Message);
+            if (builder.Length > 0)
+            {
+                builder.Append(" -> ");
             }
 
-            current = current.InnerError;
+            builder.Append(current.Message);
         }
 
-        return builder.Length == 0 ? "<error>" : builder.ToString();
+        current = current.InnerError;
     }
+
+    return builder is null ? "<error>" : builder.ToString();
+}
 
     internal static OpError New(string? message) =>
         string.IsNullOrWhiteSpace(message) ? Empty : new(message);
