@@ -22,13 +22,13 @@ public class OpResultTests
             nameof(OpResults.Err),
             parameterCount: 1,
             genericArity: 0,
-            method => method.ReturnType == nonGenericType);
+            method => method.ReturnType == typeof(OpError));
 
         var ok = okFactory.Invoke(null, null)!;
         Assert.True(ReadIsOk(ok));
         Assert.False(ReadIsErr(ok));
 
-        var err = errFactory.Invoke(null, new object?[] { "write failed" })!;
+        OpResult err = (OpError)errFactory.Invoke(null, new object?[] { "write failed" })!;
         Assert.False(ReadIsOk(err));
         Assert.True(ReadIsErr(err));
         Assert.Equal("write failed", ReadErrorMessage(err));
@@ -55,7 +55,7 @@ public class OpResultTests
             nameof(OpResults.Err),
             parameterCount: 1,
             genericArity: 0,
-            method => method.ReturnType == nonGenericType);
+            method => method.ReturnType == typeof(OpError));
 
         var errWithValue = FindOpResultsFactoryMethod(
             nameof(OpResults.Err),
@@ -68,11 +68,10 @@ public class OpResultTests
         var errValueMessageParameter = errWithValue.GetParameters().Single();
 
         Assert.NotNull(okWithoutValue);
-        Assert.Equal(nonGenericType, errWithoutValue.ReturnType);
+        Assert.Equal(typeof(OpError), errWithoutValue.ReturnType);
         Assert.True(HasDisallowNullAttribute(okValueParameter));
         Assert.True(IsNullableAnnotated(errMessageParameter));
         Assert.True(IsNullableAnnotated(errValueMessageParameter));
-        Assert.NotEqual(typeof(OpError), errWithoutValue.ReturnType);
     }
 
     [Fact]
@@ -145,9 +144,9 @@ public class OpResultTests
             nameof(OpResults.Err),
             parameterCount: 1,
             genericArity: 0,
-            method => method.ReturnType == nonGenericType);
+            method => method.ReturnType == typeof(OpError));
 
-        var err = errFactory.Invoke(null, new object?[] { message })!;
+        OpResult err = (OpError)errFactory.Invoke(null, new object?[] { message })!;
         Assert.Equal(string.Empty, ReadErrorMessage(err));
     }
 
@@ -180,14 +179,26 @@ public class OpResultTests
     }
 
     [Fact]
-    public void OpErrorToOpResultImplicitConversions_DoNotExist()
+    public void OpErrorToOpResultImplicitConversions_CreateErrResults()
     {
-        var implicitOperators = typeof(OpResult<int>)
+        OpResult nonGeneric = OpResults.Err("failed");
+        OpResult<string> generic = OpResults.Err("not found");
+
+        Assert.True(nonGeneric.IsErr);
+        Assert.Equal("failed", nonGeneric.Error!.Message);
+        Assert.True(generic.IsErr);
+        Assert.Equal("not found", generic.Error!.Message);
+    }
+
+    [Fact]
+    public void OpErrorToOpResultImplicitConversions_AreDeclaredOnResultTypes()
+    {
+        var genericImplicitOperators = typeof(OpResult<int>)
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Where(method => method.Name == "op_Implicit" && method.ReturnType == typeof(OpResult<int>))
             .ToArray();
 
-        Assert.DoesNotContain(implicitOperators, method =>
+        Assert.Contains(genericImplicitOperators, method =>
             method.GetParameters().Single().ParameterType == typeof(OpError));
 
         var nonGenericType = GetNonGenericOpResultType();
@@ -196,7 +207,7 @@ public class OpResultTests
             .Where(method => method.Name == "op_Implicit" && method.ReturnType == nonGenericType)
             .ToArray();
 
-        Assert.DoesNotContain(nonGenericImplicitOperators, method =>
+        Assert.Contains(nonGenericImplicitOperators, method =>
             method.GetParameters().Single().ParameterType == typeof(OpError));
 
         var opErrorImplicitOperators = typeof(OpError)
@@ -208,6 +219,27 @@ public class OpResultTests
             method.ReturnType == typeof(OpResult) ||
             method.ReturnType.IsGenericType &&
             method.ReturnType.GetGenericTypeDefinition() == typeof(OpResult<>));
+    }
+
+    [Fact]
+    public void OpErrorToOpResultImplicitConversions_RejectNullError()
+    {
+        var nonGenericException = Assert.Throws<ArgumentNullException>(() =>
+        {
+            OpError error = null!;
+            OpResult result = error;
+            _ = result;
+        });
+
+        var genericException = Assert.Throws<ArgumentNullException>(() =>
+        {
+            OpError error = null!;
+            OpResult<string> result = error;
+            _ = result;
+        });
+
+        Assert.Equal("error", nonGenericException.ParamName);
+        Assert.Equal("error", genericException.ParamName);
     }
 
     private static Type GetNonGenericOpResultType()

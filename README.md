@@ -9,7 +9,7 @@ It provides two first-class result containers:
 - `OpResult` for operations that either succeed without a payload or fail with an `OpError`.
 - `OpResult<T>` for operations that either succeed with a non-null payload or fail with an `OpError`.
 
-`OpError` carries the public `Message` property. It is an error details object, not a result carrier: `OpResults.Err(...)` returns a result, not an `OpError`, and `OpError` does not implicitly convert to `OpResult` or `OpResult<T>`.
+`OpError` carries the public `Message` property. It is an error details object produced by `OpResults.Err(...)` and can be converted to a failed `OpResult` or `OpResult<T>`.
 
 ## Installation
 
@@ -98,10 +98,12 @@ OpResult<User> FindUser(Guid id)
     User? user = repository.Find(id);
 
     return user is null
-        ? OpResults.Err<User>("User was not found.")
+        ? OpResults.Err("User was not found.")
         : OpResults.Ok(user);
 }
 ```
+
+`OpResults.Err<T>(...)` remains available as an explicit compatibility form, but new code should prefer `OpResults.Err(...)` and let the target result type perform the conversion.
 
 A non-null `T` can also be returned directly as a successful `OpResult<T>`:
 

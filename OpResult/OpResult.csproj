@@ -9,7 +9,7 @@
     <VerifyReferenceAotCompatibility Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</VerifyReferenceAotCompatibility>
 
     <PackageId>RokyZevon.OpResult</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Title>OpResult</Title>
     <Authors>RokyZevon</Authors>
     <Company>RokyZevon</Company>

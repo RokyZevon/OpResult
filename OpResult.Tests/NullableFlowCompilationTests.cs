@@ -93,6 +93,36 @@ public class NullableFlowCompilationTests
     }
 
     [Fact]
+    public void TargetTypedErrFactory_InGenericReturn_CompilesAndKeepsErrGuardFlow()
+    {
+        var diagnostics = CompileSnippet(
+            """
+            OpResult<User> GetUser() => OpResults.Err("not found");
+            var result = GetUser();
+            if (!result.IsErr) return;
+            var message = result.Error.Message;
+            _ = message;
+            """);
+
+        AssertNoDiagnostic(diagnostics, "CS8602");
+    }
+
+    [Fact]
+    public void TargetTypedErrFactory_InConditionalExpression_Compiles()
+    {
+        var diagnostics = CompileSnippet(
+            """
+            User? user = null;
+            OpResult<User> result = user is null
+                ? OpResults.Err("not found")
+                : OpResults.Ok(user);
+            _ = result;
+            """);
+
+        AssertNoUnexpectedErrors(diagnostics);
+    }
+
+    [Fact]
     public void NullableTypeArgument_OnOpResultOfT_ReportsNotNullOrNullabilityDiagnostic()
     {
         var diagnostics = CompileSnippet(

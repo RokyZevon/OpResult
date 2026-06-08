@@ -56,7 +56,7 @@ public class DirectWorkflowSyntaxTests
     {
         var called = false;
 
-        OpResult<string> result = await Task.FromResult(OpResults.Err("failed"))
+        OpResult<string> result = await Task.FromResult<OpResult>(OpResults.Err("failed"))
             .ThenAsync(() =>
             {
                 called = true;
@@ -76,6 +76,18 @@ public class DirectWorkflowSyntaxTests
             onErr: error => Task.FromResult(error.Message));
 
         Assert.Equal("ok-42", text);
+    }
+
+    [Fact]
+    public void GenericResult_CanReturnNonGenericErrFactory()
+    {
+        OpResult<string> result = Load(found: false);
+
+        Assert.True(result.IsErr);
+        Assert.Equal("not found", result.Error!.Message);
+
+        static OpResult<string> Load(bool found) =>
+            found ? OpResults.Ok("loaded") : OpResults.Err("not found");
     }
 
     private static Task<OpResult<int>> LoadNumberAsync() =>

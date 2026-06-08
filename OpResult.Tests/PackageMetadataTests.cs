@@ -12,7 +12,7 @@ public sealed class PackageMetadataTests
 
         Assert.Equal("net10.0;net8.0;net6.0", properties["TargetFrameworks"]);
         Assert.Equal("RokyZevon.OpResult", properties["PackageId"]);
-        Assert.Equal("0.1.0", properties["Version"]);
+        Assert.Equal("0.1.1", properties["Version"]);
         Assert.Equal("OpResult", properties["Title"]);
         Assert.Equal("RokyZevon", properties["Authors"]);
         Assert.Equal("RokyZevon", properties["Company"]);
