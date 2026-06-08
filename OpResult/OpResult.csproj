@@ -1,10 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net6.0</TargetFrameworks>
+    <TargetFrameworks>net10.0;net8.0;net6.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
+    <VerifyReferenceAotCompatibility Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</VerifyReferenceAotCompatibility>
 
     <PackageId>RokyZevon.OpResult</PackageId>
     <Version>0.1.1</Version>
@@ -13,8 +15,8 @@
     <Company>RokyZevon</Company>
     <Product>OpResult</Product>
     <Copyright>Copyright (c) 2026 RokyZevon</Copyright>
-    <Description>A small .NET Result Pattern library for explicit Ok and Err business flows.</Description>
-    <PackageTags>result;result-pattern;error-handling;dotnet;csharp</PackageTags>
+    <Description>A small Native AOT-compatible .NET Result Pattern library for explicit Ok and Err business flows.</Description>
+    <PackageTags>result;result-pattern;error-handling;dotnet;csharp;native-aot;aot;trimming</PackageTags>
     <PackageProjectUrl>https://github.com/RokyZevon/OpResult</PackageProjectUrl>
     <RepositoryUrl>https://github.com/RokyZevon/OpResult</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

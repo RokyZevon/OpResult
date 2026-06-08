@@ -2,7 +2,7 @@
 
 English | [简体中文](https://github.com/RokyZevon/OpResult/blob/main/README.zh.md)
 
-OpResult is a small .NET Result Pattern library for explicit `Ok` and `Err` business flows.
+OpResult is a small .NET Result Pattern library for explicit `Ok` and `Err` business flows. It is Native AOT compatible.
 
 It provides two first-class result containers:
 
