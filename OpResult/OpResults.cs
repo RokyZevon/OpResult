@@ -170,18 +170,18 @@ public static class OpResults
         }
     }
 
-private static OpError MapException(Exception exception)
-{
-    var typeName = exception.GetType().ToString();
+    private static OpError MapException(Exception exception)
+    {
+        var typeName = exception.GetType().ToString();
 
-    var message = string.IsNullOrWhiteSpace(exception.Message)
-        ? typeName
-        : $"{typeName}: {exception.Message}";
+        var message = string.IsNullOrWhiteSpace(exception.Message)
+            ? typeName
+            : $"{typeName}: {exception.Message}";
 
-    var innerError = exception.InnerException is null
-        ? null
-        : MapException(exception.InnerException);
+        var innerError = exception.InnerException is null
+            ? null
+            : MapException(exception.InnerException);
 
-    return OpError.New(message, innerError);
-}
+        return OpError.New(message, innerError);
+    }
 }
