@@ -169,6 +169,15 @@ OpResult<UserProfile> LoadProfile(Guid userId)
 }
 ```
 
+If you already have the inner error and need to create an outer error directly, use `OpResults.Err(message, innerError)`:
+
+```csharp
+if (userResult.IsErr)
+{
+    return OpResults.Err("Could not load profile.", userResult.Error);
+}
+```
+
 For one-line display or logging, `ToString()` returns the chain from outer error to inner error and skips empty messages:
 
 ```csharp
@@ -184,7 +193,7 @@ Expected display:
 Could not load profile. -> User was not found.
 ```
 
-`ToString()` is for human-readable display, not a stable parsing protocol.
+If every message in the chain is empty, `ToString()` returns `"<error>"`. `ToString()` is for human-readable display, not a stable parsing protocol.
 
 ### Chaining Steps with Then and ThenAsync
 

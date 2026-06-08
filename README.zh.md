@@ -169,6 +169,15 @@ OpResult<UserProfile> LoadProfile(Guid userId)
 }
 ```
 
+如果你已经持有内层错误，并且需要直接创建外层错误，可以使用 `OpResults.Err(message, innerError)`：
+
+```csharp
+if (userResult.IsErr)
+{
+    return OpResults.Err("获取用户资料失败", userResult.Error);
+}
+```
+
 用于一行显示或日志记录时，`ToString()` 会按外层到内层输出错误链，并跳过空消息：
 
 ```csharp
@@ -184,7 +193,7 @@ logger.LogError("{Error}", error);
 获取用户资料失败 -> 用户不存在
 ```
 
-`ToString()` 只用于人类可读显示，不是稳定的解析协议。
+如果错误链里所有 message 都为空，`ToString()` 返回 `"<error>"`。`ToString()` 只用于人类可读显示，不是稳定的解析协议。
 
 ### 使用 Then 和 ThenAsync 串联步骤
 
