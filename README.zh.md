@@ -9,7 +9,7 @@ OpResult 是一个轻量的 .NET Result Pattern 类库，用显式 `Ok` 和 `Err
 - `OpResult`：用于成功时不携带载荷、失败时携带 `OpError` 的操作。
 - `OpResult<T>`：用于成功时携带 non-null 载荷、失败时携带 `OpError` 的操作。
 
-`OpError` 暴露的 public surface 是 `Message` 属性。它是由 `OpResults.Err(...)` 创建的错误详情对象，并且可以转换成失败的 `OpResult` 或 `OpResult<T>`。
+`OpError` 暴露 `Message` 和可选的 `InnerError`。它是由 `OpResults.Err(...)` 创建的错误详情对象，并且可以转换成失败的 `OpResult` 或 `OpResult<T>`。
 
 ## 安装
 
@@ -151,9 +151,44 @@ void SaveAuditOrLog(string text)
 }
 ```
 
+### 使用 InnerError 包装错误
+
+当上层操作需要保留下层失败来源时，使用 `InnerError`。在 `IsErr` guard 之后，`result.Error.ToErr(...)` 会创建一个新的外层 `OpError`，并把原错误保存在 `InnerError` 中。
+
+```csharp
+OpResult<UserProfile> LoadProfile(Guid userId)
+{
+    OpResult<User> userResult = LoadUser(userId);
+
+    if (userResult.IsErr)
+    {
+        return userResult.Error.ToErr("获取用户资料失败");
+    }
+
+    return profileRepository.Load(userResult.Value.Id);
+}
+```
+
+用于一行显示或日志记录时，`ToString()` 会按外层到内层输出错误链，并跳过空消息：
+
+```csharp
+OpError error = OpResults.Err("用户不存在")
+    .ToErr("获取用户资料失败");
+
+logger.LogError("{Error}", error);
+```
+
+预期显示：
+
+```text
+获取用户资料失败 -> 用户不存在
+```
+
+`ToString()` 只用于人类可读显示，不是稳定的解析协议。
+
 ### 使用 Then 和 ThenAsync 串联步骤
 
-当下一个同步步骤也可能失败时，使用 `Then`。它只会在当前结果为 `Ok` 时运行；如果当前结果是 `Err`，continuation 不会被调用，原错误消息会继续向后传递。
+当下一个同步步骤也可能失败时，使用 `Then`。它只会在当前结果为 `Ok` 时运行；如果当前结果是 `Err`，continuation 不会被调用，原始 `OpError` 会继续向后传递。
 
 ```csharp
 OpResult SuspendUser(Guid userId)
@@ -337,9 +372,16 @@ OpResult<User> fetched = await OpResults.TryInvokeAsync(
 边界规则如下：
 
 - null delegate 会抛出 `ArgumentNullException`。
-- 非取消异常会转成 `Err(exception.Message)`。
+- 非取消异常会转成 `Err`，错误消息以完整异常类型名开头。
+- inner exception 会保留为 `OpError.InnerError` 链。
 - 返回 null task 或 null payload 会转成 `Err("Operation returned null.")`。
 - `OperationCanceledException` 及其派生的取消异常会继续传播。
+
+例如，`InvalidOperationException("outer failed", new ArgumentException("bad user id"))` 会显示为：
+
+```text
+System.InvalidOperationException: outer failed -> System.ArgumentException: bad user id
+```
 
 ## 结果边界
 

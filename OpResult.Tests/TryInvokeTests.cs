@@ -106,19 +106,19 @@ public sealed class TryInvokeTests
     }
 
     [Fact]
-    public void TryInvoke_SyncExceptionsReturnErrWithOriginalMessage()
+    public void TryInvoke_SyncExceptionsReturnErrWithTypeNameAndMessage()
     {
         var actionResult = OpResults.TryInvoke(() => throw new InvalidOperationException("action failed"));
         var funcResult = OpResults.TryInvoke<string>(() => throw new InvalidOperationException("func failed"));
 
         Assert.True(actionResult.IsErr);
-        Assert.Equal("action failed", actionResult.Error!.Message);
+        Assert.Equal("System.InvalidOperationException: action failed", actionResult.Error!.Message);
         Assert.True(funcResult.IsErr);
-        Assert.Equal("func failed", funcResult.Error!.Message);
+        Assert.Equal("System.InvalidOperationException: func failed", funcResult.Error!.Message);
     }
 
     [Fact]
-    public async Task TryInvokeAsync_ExceptionsReturnErrWithOriginalMessage()
+    public async Task TryInvokeAsync_ExceptionsReturnErrWithTypeNameAndMessage()
     {
         var actionResult = await OpResults.TryInvokeAsync(() => throw new InvalidOperationException("async action failed"));
         var funcResult = await OpResults.TryInvokeAsync<string>(() => throw new InvalidOperationException("async func failed"));
@@ -128,13 +128,81 @@ public sealed class TryInvokeTests
             Task.FromException<string>(new InvalidOperationException("async func task failed")));
 
         Assert.True(actionResult.IsErr);
-        Assert.Equal("async action failed", actionResult.Error!.Message);
+        Assert.Equal("System.InvalidOperationException: async action failed", actionResult.Error!.Message);
         Assert.True(funcResult.IsErr);
-        Assert.Equal("async func failed", funcResult.Error!.Message);
+        Assert.Equal("System.InvalidOperationException: async func failed", funcResult.Error!.Message);
         Assert.True(actionTaskResult.IsErr);
-        Assert.Equal("async action task failed", actionTaskResult.Error!.Message);
+        Assert.Equal("System.InvalidOperationException: async action task failed", actionTaskResult.Error!.Message);
         Assert.True(funcTaskResult.IsErr);
-        Assert.Equal("async func task failed", funcTaskResult.Error!.Message);
+        Assert.Equal("System.InvalidOperationException: async func task failed", funcTaskResult.Error!.Message);
+    }
+
+    [Fact]
+    public void TryInvoke_WhenExceptionHasInnerExceptionMapsInnerErrorChain()
+    {
+        var result = OpResults.TryInvoke(() =>
+            throw new InvalidOperationException(
+                "outer failed",
+                new ArgumentException("bad user id")));
+
+        Assert.True(result.IsErr);
+        Assert.Equal("System.InvalidOperationException: outer failed", result.Error!.Message);
+        Assert.NotNull(result.Error.InnerError);
+        Assert.Equal("System.ArgumentException: bad user id", result.Error.InnerError.Message);
+        Assert.Equal(
+            "System.InvalidOperationException: outer failed -> System.ArgumentException: bad user id",
+            result.Error.ToString());
+    }
+
+    [Fact]
+    public async Task TryInvokeAsync_WhenExceptionHasInnerExceptionMapsInnerErrorChain()
+    {
+        var actionResult = await OpResults.TryInvokeAsync(() =>
+            throw new InvalidOperationException(
+                "async outer failed",
+                new ArgumentException("bad async user id")));
+        var funcResult = await OpResults.TryInvokeAsync<string>(() =>
+            Task.FromException<string>(new InvalidOperationException(
+                "async func outer failed",
+                new ArgumentException("bad async func user id"))));
+
+        Assert.True(actionResult.IsErr);
+        Assert.Equal("System.InvalidOperationException: async outer failed", actionResult.Error!.Message);
+        Assert.NotNull(actionResult.Error.InnerError);
+        Assert.Equal("System.ArgumentException: bad async user id", actionResult.Error.InnerError.Message);
+        Assert.Equal(
+            "System.InvalidOperationException: async outer failed -> System.ArgumentException: bad async user id",
+            actionResult.Error.ToString());
+
+        Assert.True(funcResult.IsErr);
+        Assert.Equal("System.InvalidOperationException: async func outer failed", funcResult.Error!.Message);
+        Assert.NotNull(funcResult.Error.InnerError);
+        Assert.Equal("System.ArgumentException: bad async func user id", funcResult.Error.InnerError.Message);
+        Assert.Equal(
+            "System.InvalidOperationException: async func outer failed -> System.ArgumentException: bad async func user id",
+            funcResult.Error.ToString());
+    }
+
+    [Fact]
+    public void TryInvoke_WhenExceptionMessageIsEmptyUsesExceptionTypeName()
+    {
+        var result = OpResults.TryInvoke(() => throw new InvalidOperationException(""));
+
+        Assert.True(result.IsErr);
+        Assert.Equal("System.InvalidOperationException", result.Error!.Message);
+    }
+
+    [Fact]
+    public async Task TryInvokeAsync_WhenExceptionMessageIsEmptyUsesExceptionTypeName()
+    {
+        var actionResult = await OpResults.TryInvokeAsync(() => throw new InvalidOperationException(""));
+        var funcResult = await OpResults.TryInvokeAsync<string>(() =>
+            Task.FromException<string>(new InvalidOperationException("")));
+
+        Assert.True(actionResult.IsErr);
+        Assert.Equal("System.InvalidOperationException", actionResult.Error!.Message);
+        Assert.True(funcResult.IsErr);
+        Assert.Equal("System.InvalidOperationException", funcResult.Error!.Message);
     }
 
     [Fact]
