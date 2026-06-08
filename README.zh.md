@@ -2,7 +2,7 @@
 
 [English](https://github.com/RokyZevon/OpResult/blob/main/README.md) | 简体中文
 
-OpResult 是一个轻量的 .NET Result Pattern 类库，用显式 `Ok` 和 `Err` 路径表达业务流程。
+OpResult 是一个轻量的 .NET Result Pattern 类库，用显式 `Ok` 和 `Err` 路径表达业务流程。它兼容 Native AOT。
 
 它提供两个一等结果容器：
 

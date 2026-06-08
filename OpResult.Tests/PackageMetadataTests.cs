@@ -10,6 +10,7 @@ public sealed class PackageMetadataTests
         var project = LoadProject();
         var properties = ReadProperties(project);
 
+        Assert.Equal("net10.0;net8.0;net6.0", properties["TargetFrameworks"]);
         Assert.Equal("RokyZevon.OpResult", properties["PackageId"]);
         Assert.Equal("0.1.0", properties["Version"]);
         Assert.Equal("OpResult", properties["Title"]);
@@ -18,9 +19,9 @@ public sealed class PackageMetadataTests
         Assert.Equal("OpResult", properties["Product"]);
         Assert.Equal("Copyright (c) 2026 RokyZevon", properties["Copyright"]);
         Assert.Equal(
-            "A small .NET Result Pattern library for explicit Ok and Err business flows.",
+            "A small Native AOT-compatible .NET Result Pattern library for explicit Ok and Err business flows.",
             properties["Description"]);
-        Assert.Equal("result;result-pattern;error-handling;dotnet;csharp", properties["PackageTags"]);
+        Assert.Equal("result;result-pattern;error-handling;dotnet;csharp;native-aot;aot;trimming", properties["PackageTags"]);
         Assert.Equal("https://github.com/RokyZevon/OpResult", properties["PackageProjectUrl"]);
         Assert.Equal("https://github.com/RokyZevon/OpResult", properties["RepositoryUrl"]);
         Assert.Equal("git", properties["RepositoryType"]);
@@ -29,6 +30,14 @@ public sealed class PackageMetadataTests
         Assert.Equal("MIT", properties["PackageLicenseExpression"]);
         Assert.Equal("true", properties["IncludeSymbols"]);
         Assert.Equal("snupkg", properties["SymbolPackageFormat"]);
+        Assert.Equal("true", properties["IsAotCompatible"]);
+        Assert.Equal("true", properties["VerifyReferenceAotCompatibility"]);
+        Assert.Equal(
+            "$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))",
+            ReadPropertyConditions(project)["IsAotCompatible"]);
+        Assert.Equal(
+            "$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))",
+            ReadPropertyConditions(project)["VerifyReferenceAotCompatibility"]);
         Assert.False(properties.ContainsKey("LicenseUrl"));
         Assert.False(properties.ContainsKey("IconUrl"));
         Assert.False(properties.ContainsKey("PackageLicenseFile"));
@@ -69,5 +78,15 @@ public sealed class PackageMetadataTests
             .ToDictionary(
                 element => element.Name.LocalName,
                 element => element.Value,
+                StringComparer.Ordinal);
+
+    private static Dictionary<string, string> ReadPropertyConditions(XDocument project) =>
+        project
+            .Descendants("PropertyGroup")
+            .Elements()
+            .Where(element => !element.HasElements)
+            .ToDictionary(
+                element => element.Name.LocalName,
+                element => (string?)element.Attribute("Condition") ?? string.Empty,
                 StringComparer.Ordinal);
 }
