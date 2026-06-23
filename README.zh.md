@@ -17,6 +17,26 @@ OpResult 是一个轻量的 .NET Result Pattern 类库，用显式 `Ok` 和 `Err
 dotnet add package RokyZevon.OpResult
 ```
 
+这个包同时包含 runtime library 和默认 Roslyn analyzer。Analyzer 诊断是 OpResult 默认语义的一部分，也会在命令行构建中运行。
+
+## Analyzer 诊断
+
+OpResult 包含用于核心 result-flow 规则的 analyzer 诊断：
+
+- `OPRESULT001`：只在证明 `IsOk` 后读取 `Value`。
+- `OPRESULT002`：只在证明 `IsErr` 后读取 `Error`。
+- `OPRESULT003`：使用 `IsOk` / `IsErr`，不要用 null 或空消息伪分支测试。
+- `OPRESULT004`：消费返回的 `OpResult` 值。
+- `OPRESULT005`：使用 `ToErr` 或 `OpResults.Err(message, innerError)` 保留 `OpError` 链。
+
+使用 `.editorconfig` 配置诊断级别：
+
+```ini
+[*.cs]
+dotnet_diagnostic.OPRESULT001.severity = error
+dotnet_diagnostic.OPRESULT004.severity = none
+```
+
 ## 快速开始
 
 让可能失败的操作返回 `OpResult<T>`。传统 .NET 短路风格可以先用 `IsErr` 或 `IsOk` 做 guard，再在已确认的分支上直接读取 `Error` 或 `Value`。

@@ -12,7 +12,6 @@ public sealed class PackageMetadataTests
 
         Assert.Equal("net10.0;net8.0;net6.0", properties["TargetFrameworks"]);
         Assert.Equal("RokyZevon.OpResult", properties["PackageId"]);
-        Assert.Equal("0.1.1", properties["Version"]);
         Assert.Equal("OpResult", properties["Title"]);
         Assert.Equal("RokyZevon", properties["Authors"]);
         Assert.Equal("RokyZevon", properties["Company"]);
@@ -43,6 +42,8 @@ public sealed class PackageMetadataTests
         Assert.False(properties.ContainsKey("PackageLicenseFile"));
         Assert.False(properties.ContainsKey("PackageLicenseUrl"));
         Assert.False(properties.ContainsKey("PackageReleaseNotes"));
+        Assert.False(properties.ContainsKey("Version"));
+        Assert.False(properties.ContainsKey("PackageVersion"));
     }
 
     [Fact]
@@ -54,6 +55,20 @@ public sealed class PackageMetadataTests
 
         Assert.Equal("true", (string?)readmeItem.Attribute("Pack"));
         Assert.Equal(string.Empty, (string?)readmeItem.Attribute("PackagePath"));
+    }
+
+    [Fact]
+    public void OpResultProject_PacksAnalyzerAtNuGetAnalyzerPath()
+    {
+        var analyzerItem = LoadProject()
+            .Descendants("None")
+            .Single(element => ((string?)element.Attribute("Include"))?.Contains(
+                "RokyZevon.OpResult.Analyzers.dll",
+                StringComparison.Ordinal) == true);
+
+        Assert.Equal("true", (string?)analyzerItem.Attribute("Pack"));
+        Assert.Equal("analyzers/dotnet/cs", (string?)analyzerItem.Attribute("PackagePath"));
+        Assert.Equal("false", (string?)analyzerItem.Attribute("Visible"));
     }
 
     private static XDocument LoadProject()

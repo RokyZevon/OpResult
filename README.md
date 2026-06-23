@@ -17,6 +17,26 @@ It provides two first-class result containers:
 dotnet add package RokyZevon.OpResult
 ```
 
+The package includes the runtime library and the default Roslyn analyzers. Analyzer diagnostics are part of the default OpResult semantics and also run in command-line builds.
+
+## Analyzer Diagnostics
+
+OpResult includes analyzer diagnostics for the core result-flow rules:
+
+- `OPRESULT001`: read `Value` only after proving `IsOk`.
+- `OPRESULT002`: read `Error` only after proving `IsErr`.
+- `OPRESULT003`: use `IsOk` / `IsErr`, not null or empty-message pseudo branch tests.
+- `OPRESULT004`: consume returned `OpResult` values.
+- `OPRESULT005`: preserve `OpError` chains with `ToErr` or `OpResults.Err(message, innerError)`.
+
+Configure diagnostic severity with `.editorconfig`:
+
+```ini
+[*.cs]
+dotnet_diagnostic.OPRESULT001.severity = error
+dotnet_diagnostic.OPRESULT004.severity = none
+```
+
 ## Quick Start
 
 Return `OpResult<T>` from operations that can fail. For traditional .NET short-circuit flow, guard with `IsErr` or `IsOk`, then read `Error` or `Value` directly on the verified branch.
