@@ -63,7 +63,7 @@ jobs:
       - name: Test
         run: |
           dotnet test \
-            --project OpResult.Tests/OpResult.Tests.csproj \
+            --solution OpResult.slnx \
             --configuration Release \
             --no-build \
             --no-restore

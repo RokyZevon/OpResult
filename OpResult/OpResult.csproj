@@ -9,7 +9,6 @@
     <VerifyReferenceAotCompatibility Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</VerifyReferenceAotCompatibility>
 
     <PackageId>RokyZevon.OpResult</PackageId>
-    <Version>0.1.1</Version>
     <Title>OpResult</Title>
     <Authors>RokyZevon</Authors>
     <Company>RokyZevon</Company>
@@ -29,6 +28,20 @@
 
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../OpResult.Analyzers/OpResult.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../OpResult.Analyzers/bin/$(Configuration)/netstandard2.0/RokyZevon.OpResult.Analyzers.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
   </ItemGroup>
 
 </Project>

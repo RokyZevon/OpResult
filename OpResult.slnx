@@ -1,4 +1,7 @@
 <Solution>
   <Project Path="OpResult/OpResult.csproj" />
+  <Project Path="OpResult.Analyzers/OpResult.Analyzers.csproj" />
   <Project Path="OpResult.Tests/OpResult.Tests.csproj" />
+  <Project Path="OpResult.Analyzers.Tests/OpResult.Analyzers.Tests.csproj" />
+  <Project Path="OpResult.Package.Tests/OpResult.Package.Tests.csproj" />
 </Solution>
