@@ -71,7 +71,23 @@ public sealed class PackageMetadataTests
         Assert.Equal("false", (string?)analyzerItem.Attribute("Visible"));
     }
 
+    [Fact]
+    public void AnalyzerProject_UsesNet6CompatibleRoslynDependency()
+    {
+        var packageReference = LoadProject("OpResult.Analyzers", "OpResult.Analyzers.csproj")
+            .Descendants("PackageReference")
+            .Single(element => (string?)element.Attribute("Include") == "Microsoft.CodeAnalysis.CSharp");
+
+        Assert.Equal("4.3.1", (string?)packageReference.Attribute("Version"));
+        Assert.Equal("all", (string?)packageReference.Attribute("PrivateAssets"));
+    }
+
     private static XDocument LoadProject()
+    {
+        return LoadProject("OpResult", "OpResult.csproj");
+    }
+
+    private static XDocument LoadProject(string projectDirectory, string projectFileName)
     {
         var projectPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -79,8 +95,8 @@ public sealed class PackageMetadataTests
             "..",
             "..",
             "..",
-            "OpResult",
-            "OpResult.csproj"));
+            projectDirectory,
+            projectFileName));
 
         return XDocument.Load(projectPath);
     }

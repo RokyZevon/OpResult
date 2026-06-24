@@ -8,7 +8,6 @@ using Xunit;
 public sealed class PackageFixtureTests
 {
     private const string PackageId = "RokyZevon.OpResult";
-    private const string PackageVersion = "0.1.1";
     private const string AnalyzerPath = "analyzers/dotnet/cs/RokyZevon.OpResult.Analyzers.dll";
 
     [Fact]
@@ -91,10 +90,10 @@ public sealed class PackageFixtureTests
             "OpResult/OpResult.csproj",
             "-c",
             "Release",
+            "--no-build",
+            "--no-restore",
             "-o",
             packagesDirectory,
-            $"-p:Version={PackageVersion}",
-            $"-p:PackageVersion={PackageVersion}",
             "-p:ContinuousIntegrationBuild=true");
 
         Assert.True(result.ExitCode == 0, result.ToString());
@@ -102,12 +101,12 @@ public sealed class PackageFixtureTests
 
     private static string GetPackagePath(string packagesDirectory)
     {
-        var packagePath = Directory
-            .EnumerateFiles(packagesDirectory, $"{PackageId}.{PackageVersion}.nupkg", SearchOption.TopDirectoryOnly)
-            .SingleOrDefault();
+        var packagePaths = Directory
+            .EnumerateFiles(packagesDirectory, $"{PackageId}.*.nupkg", SearchOption.TopDirectoryOnly)
+            .ToArray();
 
-        Assert.NotNull(packagePath);
-        return packagePath;
+        Assert.Single(packagePaths);
+        return packagePaths[0];
     }
 
     private static void WriteConsumerProject(string consumerDirectory, string packagesDirectory)
@@ -129,7 +128,7 @@ public sealed class PackageFixtureTests
                     new XElement(
                         "PackageReference",
                         new XAttribute("Include", PackageId),
-                        new XAttribute("Version", PackageVersion)))));
+                        new XAttribute("Version", "*")))));
 
         project.Save(Path.Combine(consumerDirectory, "Consumer.csproj"));
     }
@@ -198,10 +197,13 @@ public sealed class PackageFixtureTests
         }
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start dotnet process.");
-        var standardOutput = await process.StandardOutput.ReadToEndAsync();
-        var standardError = await process.StandardError.ReadToEndAsync();
+        var standardOutputTask = process.StandardOutput.ReadToEndAsync();
+        var standardErrorTask = process.StandardError.ReadToEndAsync();
 
         await process.WaitForExitAsync();
+
+        var standardOutput = await standardOutputTask;
+        var standardError = await standardErrorTask;
 
         return new CommandResult(process.ExitCode, standardOutput, standardError);
     }

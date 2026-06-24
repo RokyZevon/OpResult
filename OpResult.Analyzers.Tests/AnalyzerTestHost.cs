@@ -36,6 +36,11 @@ internal static class AnalyzerTestHost
             }
             """;
 
+        return await GetDiagnosticsForSourceAsync(source);
+    }
+
+    public static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsForSourceAsync(string source)
+    {
         var compilation = CreateCompilation(source);
         var compilationDiagnostics = compilation.GetDiagnostics();
         var errors = compilationDiagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error).ToArray();

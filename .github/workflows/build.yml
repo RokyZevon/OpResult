@@ -40,7 +40,7 @@ jobs:
           fi
 
           if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Release tag must be a stable version in the form vX.Y.Z, for example v0.1.0."
+            echo "Release tag must be a stable version in the form vX.Y.Z."
             exit 1
           fi
 
@@ -63,7 +63,7 @@ jobs:
       - name: Test
         run: |
           dotnet test \
-            --solution OpResult.slnx \
+            OpResult.slnx \
             --configuration Release \
             --no-build \
             --no-restore

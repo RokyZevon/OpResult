@@ -63,7 +63,7 @@ Create `OpResult.Analyzers/OpResult.Analyzers.csproj`:
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>
@@ -876,6 +876,13 @@ Create `OpResult.Package.Tests/OpResult.Package.Tests.csproj`:
     <PackageReference Include="xunit.v3.mtp-v2" Version="3.2.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../OpResult/OpResult.csproj" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=net6.0" />
+    <ProjectReference Include="../OpResult/OpResult.csproj" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=net8.0" />
+    <ProjectReference Include="../OpResult/OpResult.csproj" ReferenceOutputAssembly="false" SetTargetFramework="TargetFramework=net10.0" />
+    <ProjectReference Include="../OpResult.Analyzers/OpResult.Analyzers.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>
 ```
 
@@ -897,7 +904,8 @@ Modify `OpResult.slnx`:
 
 Create `OpResult.Package.Tests/PackageFixtureTests.cs` with tests that:
 
-- Run `dotnet pack OpResult/OpResult.csproj -c Release -o <temp-packages> -p:Version=0.1.1`.
+- Run `dotnet pack OpResult/OpResult.csproj -c Release --no-build --no-restore -o <temp-packages> -p:ContinuousIntegrationBuild=true`.
+- Locate the single generated `RokyZevon.OpResult.*.nupkg` file in `<temp-packages>` without reading or asserting its version.
 - Inspect the `.nupkg` with `System.IO.Compression.ZipArchive`.
 - Assert these entries exist:
   - `lib/net6.0/OpResult.dll`
@@ -906,7 +914,7 @@ Create `OpResult.Package.Tests/PackageFixtureTests.cs` with tests that:
   - `analyzers/dotnet/cs/RokyZevon.OpResult.Analyzers.dll`
   - `README.md`
 - Assert no analyzer DLL exists under `lib/`, `ref/`, or `runtime/`.
-- Create a temporary consumer project with a local `RestoreSources` pointing at the packed package directory.
+- Create a temporary consumer project with a local `RestoreSources` pointing only at the packed package directory and `PackageReference Include="RokyZevon.OpResult" Version="*"`.
 - Build a consumer source file containing:
 
 ```csharp
@@ -921,7 +929,9 @@ _ = result.Error;
 Implementation notes:
 
 - Use `ProcessStartInfo` with `RedirectStandardOutput = true` and `RedirectStandardError = true`.
+- Start `StandardOutput.ReadToEndAsync()` and `StandardError.ReadToEndAsync()` before awaiting process exit so noisy failing commands cannot block on a full pipe.
 - Set `WorkingDirectory` to the repository root.
+- The fixture project references every runtime target framework plus the analyzer project with `ReferenceOutputAssembly="false"` so `--no-build` pack has all expected build outputs when package tests run directly.
 - Give each fixture test its own directory under `Path.GetTempPath()`.
 - Do not write fixture projects into the repository.
 
@@ -1017,7 +1027,7 @@ Expected: build succeeds.
 Run:
 
 ```bash
-dotnet test --solution OpResult.slnx -c Release --no-build --no-restore
+dotnet test OpResult.slnx -c Release --no-build --no-restore
 ```
 
 Expected: all runtime, analyzer, and package fixture tests pass.
@@ -1027,7 +1037,7 @@ Expected: all runtime, analyzer, and package fixture tests pass.
 Run:
 
 ```bash
-dotnet pack OpResult/OpResult.csproj -c Release --no-build --no-restore --output /tmp/opresult-analyzer-pack-check -p:Version=0.1.1 -p:ContinuousIntegrationBuild=true -m:1 -nr:false
+dotnet pack OpResult/OpResult.csproj -c Release --no-build --no-restore --output /tmp/opresult-analyzer-pack-check -p:ContinuousIntegrationBuild=true -m:1 -nr:false
 ```
 
 Expected: `.nupkg` and `.snupkg` are created; `.nupkg` contains `analyzers/dotnet/cs/RokyZevon.OpResult.Analyzers.dll`.
@@ -1057,7 +1067,8 @@ Expected: one conventional commit containing analyzer implementation, tests, pac
 
 - `RokyZevon.OpResult` remains the only public NuGet package.
 - Analyzer project is build-only and is not published as `RokyZevon.OpResult.Analyzers`.
-- First implementation uses Roslyn package version `4.11.0` to match the existing test project dependency.
+- Analyzer project compiles against Roslyn package version `4.3.1` so the generic `analyzers/dotnet/cs` asset remains loadable by the .NET 6 SDK compiler host.
+- Test projects may use a newer Roslyn package because those dependencies are test-only and are not packed into the runtime NuGet package.
 - First version uses IDs `OPRESULT001` through `OPRESULT005`; no separate value-type-only diagnostic is created.
 - No code fix is included.
 - Default severity is warning for every first-version diagnostic.
