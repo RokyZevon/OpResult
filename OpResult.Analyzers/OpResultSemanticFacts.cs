@@ -328,11 +328,11 @@ internal static class OpResultSemanticFacts
         IOperation condition,
         Compilation compilation,
         ISymbol receiverSymbol,
-        out OpResultBranchState whenTrueState,
-        out OpResultBranchState whenFalseState)
+        out OpResultBranchState? whenTrueState,
+        out OpResultBranchState? whenFalseState)
     {
-        whenTrueState = default;
-        whenFalseState = default;
+        whenTrueState = null;
+        whenFalseState = null;
 
         condition = Unwrap(condition);
 
@@ -345,6 +345,17 @@ internal static class OpResultSemanticFacts
 
             whenTrueState = operandFalseState;
             whenFalseState = operandTrueState;
+            return true;
+        }
+
+        if (condition is IBinaryOperation binary
+            && TryGetBinaryGuardStates(
+                binary,
+                compilation,
+                receiverSymbol,
+                out whenTrueState,
+                out whenFalseState))
+        {
             return true;
         }
 
@@ -371,6 +382,80 @@ internal static class OpResultSemanticFacts
             default:
                 return false;
         }
+    }
+
+    private static bool TryGetBinaryGuardStates(
+        IBinaryOperation binary,
+        Compilation compilation,
+        ISymbol receiverSymbol,
+        out OpResultBranchState? whenTrueState,
+        out OpResultBranchState? whenFalseState)
+    {
+        whenTrueState = null;
+        whenFalseState = null;
+
+        if (!IsBooleanConjunction(binary.OperatorKind) && !IsBooleanDisjunction(binary.OperatorKind))
+        {
+            return false;
+        }
+
+        var hasLeftGuard = TryGetGuardStates(
+            binary.LeftOperand,
+            compilation,
+            receiverSymbol,
+            out var leftTrueState,
+            out var leftFalseState);
+        var hasRightGuard = TryGetGuardStates(
+            binary.RightOperand,
+            compilation,
+            receiverSymbol,
+            out var rightTrueState,
+            out var rightFalseState);
+
+        if (!hasLeftGuard && !hasRightGuard)
+        {
+            return false;
+        }
+
+        if (IsBooleanConjunction(binary.OperatorKind))
+        {
+            whenTrueState = MergeCompatibleStates(leftTrueState, rightTrueState);
+            whenFalseState = hasLeftGuard && hasRightGuard
+                ? MergeCompatibleStates(leftFalseState, rightFalseState)
+                : null;
+        }
+        else
+        {
+            whenTrueState = hasLeftGuard && hasRightGuard
+                ? MergeCompatibleStates(leftTrueState, rightTrueState)
+                : null;
+            whenFalseState = MergeCompatibleStates(leftFalseState, rightFalseState);
+        }
+
+        return whenTrueState is not null || whenFalseState is not null;
+    }
+
+    private static bool IsBooleanConjunction(BinaryOperatorKind operatorKind) =>
+        operatorKind is BinaryOperatorKind.ConditionalAnd or BinaryOperatorKind.And;
+
+    private static bool IsBooleanDisjunction(BinaryOperatorKind operatorKind) =>
+        operatorKind is BinaryOperatorKind.ConditionalOr or BinaryOperatorKind.Or;
+
+    private static OpResultBranchState? MergeCompatibleStates(
+        OpResultBranchState? leftState,
+        OpResultBranchState? rightState)
+    {
+        if (leftState is null)
+        {
+            return rightState;
+        }
+
+        if (rightState is null || leftState == rightState)
+        {
+            return leftState;
+        }
+
+        return null;
     }
 
     private static bool DoesOperationExit(IOperation operation)
@@ -419,14 +504,36 @@ internal static class OpResultSemanticFacts
         operation switch
         {
             ISimpleAssignmentOperation assignment =>
-                SymbolEqualityComparer.Default.Equals(GetReferencedSymbol(assignment.Target), receiverSymbol),
+                ReferencesSymbol(assignment.Target, receiverSymbol),
+            IDeconstructionAssignmentOperation deconstruction =>
+                ReferencesSymbol(deconstruction.Target, receiverSymbol),
             IArgumentOperation argument when IsWriteArgument(argument) =>
-                SymbolEqualityComparer.Default.Equals(GetReferencedSymbol(argument.Value), receiverSymbol),
+                ReferencesSymbol(argument.Value, receiverSymbol),
             _ => false,
         };
 
     private static bool IsWriteArgument(IArgumentOperation argument) =>
         argument.Parameter?.RefKind is RefKind.Ref or RefKind.Out;
+
+    private static bool ReferencesSymbol(IOperation operation, ISymbol receiverSymbol)
+    {
+        operation = Unwrap(operation);
+
+        if (SymbolEqualityComparer.Default.Equals(GetReferencedSymbol(operation), receiverSymbol))
+        {
+            return true;
+        }
+
+        foreach (var child in operation.ChildOperations)
+        {
+            if (ReferencesSymbol(child, receiverSymbol))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static IOperation? GetContainingStatement(IOperation operation)
     {
@@ -511,6 +618,8 @@ internal static class OpResultSemanticFacts
         {
             ILocalReferenceOperation localReference => localReference.Local,
             IParameterReferenceOperation parameterReference => parameterReference.Parameter,
+            IFieldReferenceOperation fieldReference => fieldReference.Field,
+            IPropertyReferenceOperation propertyReference => propertyReference.Property,
             _ => null,
         };
     }

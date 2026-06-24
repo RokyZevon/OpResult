@@ -11,13 +11,12 @@ namespace OpResult.Analyzers;
 public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
 {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-    [
-        DiagnosticDescriptors.UnguardedValueAccess,
-        DiagnosticDescriptors.UnguardedErrorAccess,
-        DiagnosticDescriptors.PseudoBranchTest,
-        DiagnosticDescriptors.UnusedResultReturnValue,
-        DiagnosticDescriptors.DirectErrorChainLoss,
-    ];
+        ImmutableArray.Create(
+            DiagnosticDescriptors.UnguardedValueAccess,
+            DiagnosticDescriptors.UnguardedErrorAccess,
+            DiagnosticDescriptors.PseudoBranchTest,
+            DiagnosticDescriptors.UnusedResultReturnValue,
+            DiagnosticDescriptors.DirectErrorChainLoss);
 
     public override void Initialize(AnalysisContext context)
     {

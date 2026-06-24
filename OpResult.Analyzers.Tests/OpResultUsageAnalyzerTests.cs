@@ -83,6 +83,38 @@ public sealed class OpResultUsageAnalyzerTests
     }
 
     [Fact]
+    public async Task ValueAccess_InsideCompoundIsOkBranch_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var user = new User(1);
+            var result = LoadUser(found: true);
+            if (result.IsOk && user.Id > 0)
+            {
+                _ = result.Value;
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
+    public async Task ValueAccess_InsidePartialOrBranch_ReportsDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var user = new User(1);
+            var result = LoadUser(found: true);
+            if (result.IsOk || user.Id > 0)
+            {
+                _ = result.Value;
+            }
+            """);
+
+        AnalyzerTestHost.AssertDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
     public async Task ValueAccess_AfterReassignmentInsideIsOkBranch_ReportsDiagnostic()
     {
         var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
@@ -134,6 +166,22 @@ public sealed class OpResultUsageAnalyzerTests
             void Replace(ref global::OpResult.OpResult<User> target)
             {
                 target = LoadUser(found: false);
+            }
+            """);
+
+        AnalyzerTestHost.AssertDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
+    public async Task ValueAccess_AfterDeconstructionAssignmentInsideIsOkBranch_ReportsDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: true);
+            if (result.IsOk)
+            {
+                (result, _) = (LoadUser(found: false), 0);
+                _ = result.Value;
             }
             """);
 
@@ -253,6 +301,70 @@ public sealed class OpResultUsageAnalyzerTests
             """);
 
         AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedErrorAccess);
+    }
+
+    [Fact]
+    public async Task ValueAccess_InsideFieldIsOkBranch_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsForSourceAsync(
+            """
+            #nullable enable
+
+            using global::OpResult;
+
+            public sealed class User
+            {
+                public User(int id) => Id = id;
+                public int Id { get; }
+            }
+
+            public sealed class Probe
+            {
+                private OpResult<User> _cached = OpResults.Ok(new User(1));
+
+                public void Run()
+                {
+                    if (_cached.IsOk)
+                    {
+                        _ = _cached.Value;
+                    }
+                }
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
+    public async Task ErrorAccess_InsidePropertyIsErrBranch_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsForSourceAsync(
+            """
+            #nullable enable
+
+            using global::OpResult;
+
+            public sealed class User
+            {
+                public User(int id) => Id = id;
+                public int Id { get; }
+            }
+
+            public sealed class Probe
+            {
+                public OpResult<User> Cached { get; set; } = OpResults.Err<User>("not found");
+
+                public void Run()
+                {
+                    if (Cached.IsErr)
+                    {
+                        _ = Cached.Error;
+                    }
+                }
+            }
+            """);
+
         AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedErrorAccess);
     }
 
