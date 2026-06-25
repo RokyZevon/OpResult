@@ -283,6 +283,54 @@ public sealed class OpResultUsageAnalyzerTests
     }
 
     [Fact]
+    public async Task ValueAccess_InsidePropertyPatternIsOkBranch_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: true);
+            if (result is { IsOk: true })
+            {
+                _ = result.Value;
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
+    public async Task ErrorAccess_InsideElseOfPropertyPatternIsOkBranch_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: false);
+            if (result is { IsOk: true })
+            {
+            }
+            else
+            {
+                _ = result.Error;
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedErrorAccess);
+    }
+
+    [Fact]
+    public async Task ValueAccess_InsidePatternIsErrFalseBranch_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: true);
+            if (result.IsErr is false)
+            {
+                _ = result.Value;
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
     public async Task ErrorAccess_InsideExplicitIsErrTrueBranch_DoesNotReportDiagnostic()
     {
         var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
@@ -805,6 +853,43 @@ public sealed class OpResultUsageAnalyzerTests
     }
 
     [Fact]
+    public async Task ValueAccess_InsideDifferentIndexerIsOkBranch_ReportsDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsForSourceAsync(
+            """
+            #nullable enable
+
+            using global::OpResult;
+
+            public sealed class User
+            {
+                public User(int id) => Id = id;
+                public int Id { get; }
+            }
+
+            public sealed class ResultBag
+            {
+                public OpResult<User> this[int index] => index == 0
+                    ? OpResults.Ok(new User(1))
+                    : OpResults.Err<User>("not found");
+            }
+
+            public sealed class Probe
+            {
+                public void Run(ResultBag results)
+                {
+                    if (results[0].IsOk)
+                    {
+                        _ = results[1].Value;
+                    }
+                }
+            }
+            """);
+
+        AnalyzerTestHost.AssertDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
     public async Task ValueAccess_AfterSiblingMemberWriteInsidePropertyIsOkBranch_DoesNotReportDiagnostic()
     {
         var diagnostics = await AnalyzerTestHost.GetDiagnosticsForSourceAsync(
@@ -1044,6 +1129,112 @@ public sealed class OpResultUsageAnalyzerTests
     }
 
     [Fact]
+    public async Task ErrorMessageNonEmptyChecks_ReportPseudoBranchDiagnostics()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: false);
+            if (result.Error.Message != "")
+            {
+            }
+
+            if (result.Error.Message != string.Empty)
+            {
+            }
+            """);
+
+        Assert.Equal(2, diagnostics.Count(diagnostic => diagnostic.Id == DiagnosticIds.PseudoBranchTest));
+    }
+
+    [Fact]
+    public async Task ErrorMessageNonEmptyCheck_InsideIsErrBranch_DoesNotReportPseudoBranchDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: false);
+            if (result.IsErr)
+            {
+                if (result.Error.Message != "")
+                {
+                }
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.PseudoBranchTest);
+    }
+
+    [Fact]
+    public async Task ParenthesizedErrorMessageEmptyCheck_ReportsPseudoBranchDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: false);
+            if (((result.Error.Message)) == "")
+            {
+            }
+            """);
+
+        AnalyzerTestHost.AssertDiagnostic(diagnostics, DiagnosticIds.PseudoBranchTest);
+    }
+
+    [Fact]
+    public async Task PatternNullChecks_ReportPseudoBranchDiagnostics()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: false);
+            if (result.Value is not null)
+            {
+            }
+
+            if (result.Error is null)
+            {
+            }
+            """);
+
+        Assert.Equal(2, diagnostics.Count(diagnostic => diagnostic.Id == DiagnosticIds.PseudoBranchTest));
+    }
+
+    [Fact]
+    public async Task QualifiedStringEmptyChecks_ReportPseudoBranchDiagnostics()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsForSourceAsync(
+            """
+            #nullable enable
+
+            using System;
+            using global::OpResult;
+
+            public sealed class User
+            {
+                public User(int id) => Id = id;
+                public int Id { get; }
+            }
+
+            public static class Probe
+            {
+                public static OpResult<User> LoadUser(bool found) => found
+                    ? OpResults.Ok(new User(1))
+                    : OpResults.Err<User>("not found");
+
+                public static void Run()
+                {
+                    var result = LoadUser(found: false);
+                    if (result.Error.Message == String.Empty)
+                    {
+                    }
+
+                    if (result.Error.Message == System.String.Empty)
+                    {
+                    }
+                }
+            }
+            """);
+
+        Assert.Equal(2, diagnostics.Count(diagnostic => diagnostic.Id == DiagnosticIds.PseudoBranchTest));
+    }
+
+    [Fact]
     public async Task ReversedNullChecks_ReportPseudoBranchDiagnostic()
     {
         var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
@@ -1255,6 +1446,21 @@ public sealed class OpResultUsageAnalyzerTests
             """);
 
         AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.DirectErrorChainLoss);
+    }
+
+    [Fact]
+    public async Task DirectErrorMessageRebuildWithNullInner_ReportsChainLossDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: false);
+            if (result.IsErr)
+            {
+                _ = OpResults.Err(result.Error.Message, null);
+            }
+            """);
+
+        AnalyzerTestHost.AssertDiagnostic(diagnostics, DiagnosticIds.DirectErrorChainLoss);
     }
 
     [Fact]
