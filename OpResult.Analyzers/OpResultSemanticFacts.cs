@@ -564,15 +564,36 @@ internal static class OpResultSemanticFacts
         }
 
         if (condition is IBinaryOperation binary
-            && TryGetBinaryGuardStates(
-                binary,
-                compilation,
-                receiverKey,
-                out whenTrueState,
-                out whenFalseState))
+            && (TryGetBooleanComparisonGuardStates(
+                    binary,
+                    compilation,
+                    receiverKey,
+                    out whenTrueState,
+                    out whenFalseState)
+                || TryGetBinaryGuardStates(
+                    binary,
+                    compilation,
+                    receiverKey,
+                    out whenTrueState,
+                    out whenFalseState)))
         {
             return true;
         }
+
+        return TryGetBareGuardStates(condition, compilation, receiverKey, out whenTrueState, out whenFalseState);
+    }
+
+    private static bool TryGetBareGuardStates(
+        IOperation condition,
+        Compilation compilation,
+        OpResultReceiverKey receiverKey,
+        out OpResultBranchState? whenTrueState,
+        out OpResultBranchState? whenFalseState)
+    {
+        whenTrueState = null;
+        whenFalseState = null;
+
+        condition = Unwrap(condition);
 
         if (condition is not IPropertyReferenceOperation propertyReference
             || propertyReference.Instance is null
@@ -598,6 +619,89 @@ internal static class OpResultSemanticFacts
             default:
                 return false;
         }
+    }
+
+    private static bool TryGetBooleanComparisonGuardStates(
+        IBinaryOperation binary,
+        Compilation compilation,
+        OpResultReceiverKey receiverKey,
+        out OpResultBranchState? whenTrueState,
+        out OpResultBranchState? whenFalseState)
+    {
+        whenTrueState = null;
+        whenFalseState = null;
+
+        if (binary.OperatorKind is not BinaryOperatorKind.Equals and not BinaryOperatorKind.NotEquals)
+        {
+            return false;
+        }
+
+        if (!TryGetGuardComparedToBooleanLiteral(
+                binary.LeftOperand,
+                binary.RightOperand,
+                compilation,
+                receiverKey,
+                out var guardTrueState,
+                out var guardFalseState,
+                out var literalValue)
+            && !TryGetGuardComparedToBooleanLiteral(
+                binary.RightOperand,
+                binary.LeftOperand,
+                compilation,
+                receiverKey,
+                out guardTrueState,
+                out guardFalseState,
+                out literalValue))
+        {
+            return false;
+        }
+
+        var comparisonTrueMeansGuardTrue = binary.OperatorKind == BinaryOperatorKind.Equals
+            ? literalValue
+            : !literalValue;
+
+        whenTrueState = comparisonTrueMeansGuardTrue ? guardTrueState : guardFalseState;
+        whenFalseState = comparisonTrueMeansGuardTrue ? guardFalseState : guardTrueState;
+        return true;
+    }
+
+    private static bool TryGetGuardComparedToBooleanLiteral(
+        IOperation guardCandidate,
+        IOperation literalCandidate,
+        Compilation compilation,
+        OpResultReceiverKey receiverKey,
+        out OpResultBranchState? guardTrueState,
+        out OpResultBranchState? guardFalseState,
+        out bool literalValue)
+    {
+        guardTrueState = null;
+        guardFalseState = null;
+        literalValue = false;
+
+        return TryGetBareGuardStates(guardCandidate, compilation, receiverKey, out guardTrueState, out guardFalseState)
+            && TryGetBooleanSyntaxLiteralValue(literalCandidate, out literalValue);
+    }
+
+    private static bool TryGetBooleanSyntaxLiteralValue(IOperation operation, out bool value)
+    {
+        operation = Unwrap(operation);
+        value = false;
+
+        if (operation.Syntax is LiteralExpressionSyntax literal)
+        {
+            if (literal.IsKind(SyntaxKind.TrueLiteralExpression))
+            {
+                value = true;
+                return true;
+            }
+
+            if (literal.IsKind(SyntaxKind.FalseLiteralExpression))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool TryGetBinaryGuardStates(
@@ -652,7 +756,7 @@ internal static class OpResultSemanticFacts
         else
         {
             whenTrueState = hasLeftGuard && hasRightGuard
-                ? MergeCompatibleStates(leftTrueState, rightTrueState)
+                ? MergeRequiredCompatibleStates(leftTrueState, rightTrueState)
                 : null;
             var leftProofState = hasLeftGuard && !rightHasInvalidatingWrite
                 ? leftFalseState
@@ -688,6 +792,18 @@ internal static class OpResultSemanticFacts
         }
 
         return null;
+    }
+
+    private static OpResultBranchState? MergeRequiredCompatibleStates(
+        OpResultBranchState? leftState,
+        OpResultBranchState? rightState)
+    {
+        if (leftState is null || rightState is null || leftState != rightState)
+        {
+            return null;
+        }
+
+        return leftState;
     }
 
     private static bool DoesOperationExitBeforeAccess(IOperation operation, IOperation accessOperation)
@@ -823,8 +939,7 @@ internal static class OpResultSemanticFacts
 
     private static bool AreRelatedReceiverKeys(OpResultReceiverKey candidateReceiverKey, OpResultReceiverKey receiverKey) =>
         candidateReceiverKey == receiverKey
-        || receiverKey.StartsWith(candidateReceiverKey)
-        || candidateReceiverKey.StartsWith(receiverKey);
+        || receiverKey.StartsWith(candidateReceiverKey);
 
     private static bool IsInsidePathThatExitsBeforeAccess(IOperation operation, IOperation accessOperation)
     {
