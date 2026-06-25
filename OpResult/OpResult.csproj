@@ -33,7 +33,6 @@
   <ItemGroup>
     <ProjectReference Include="../OpResult.Analyzers/OpResult.Analyzers.csproj"
                       ReferenceOutputAssembly="false"
-                      OutputItemType="Analyzer"
                       PrivateAssets="all" />
   </ItemGroup>
 

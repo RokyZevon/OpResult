@@ -458,6 +458,8 @@ Update `OpResult.Analyzers/OpResultSemanticFacts.cs` so it can:
   - `if (user.Enabled && result.IsOk) { result.Value; }`
   - `if (result.IsOk && result.Value.Id > 0) { }`
   - `if (result.IsOk || result.Error.Message.Length > 0) { }`
+  - `if (result is { IsOk: true }) { result.Value; }`
+  - `if (result.IsErr is false) { result.Value; }`
   - `if (result.IsErr) { result.Error; }`
   - `if (!result.IsOk) { result.Error; }`
   - `else` inverse branches.
@@ -469,7 +471,7 @@ Update `OpResult.Analyzers/OpResultSemanticFacts.cs` so it can:
 - Do not invalidate a proof for writes on paths that exit before the access with `return`, `throw`, or a `continue` that skips the current loop iteration.
 - Preserve short-circuit direction: later right-side guards can prove the post-left-mutation value, while later right-side writes invalidate earlier left-side proofs.
 - Let later operands in a C# short-circuit condition use facts proven by earlier operands, while still invalidating those facts for writes that occur before the guarded access.
-- Do not expand collection / indexer receiver identity in this PR; `results[0]` / `results[1]` requires a separate design pass.
+- Do not expand collection / indexer receiver identity in this PR; property references with arguments are untrackable so a `results[0]` guard cannot prove `results[1]`.
 
 Implementation constraints:
 
@@ -694,6 +696,21 @@ var result = LoadUser(found: false);
 if (result.Error.Message == string.Empty) { }
 ```
 
+```csharp
+var result = LoadUser(found: false);
+if (result.Error.Message != "") { }
+```
+
+```csharp
+var result = LoadUser(found: false);
+if (result.Error.Message == System.String.Empty) { }
+```
+
+```csharp
+var result = LoadUser(found: false);
+if (result.Value is not null) { }
+```
+
 Run:
 
 ```bash
@@ -706,17 +723,22 @@ Expected: test fails because `OPRESULT003` is not implemented.
 
 Register syntax-node analysis for `EqualsExpression` and `NotEqualsExpression`.
 
-Report `OPRESULT003` only for these exact patterns:
+Report `OPRESULT003` only for these exact pattern families:
 
 - `result.Value == null`
 - `result.Value != null`
 - `result.Error == null`
 - `result.Error != null`
 - `result.Error.Message == ""`
+- `result.Error.Message != ""`
 - `result.Error.Message == string.Empty`
+- `result.Error.Message != string.Empty`
+- `result.Error.Message == String.Empty` / `System.String.Empty`
+- `result.Value is null` / `is not null`
+- `result.Error is null` / `is not null`
 
 Do not report `string.IsNullOrEmpty(result.Error.Message)` or `result.Error.Message.Length == 0`.
-Do not report `result.Error.Message == ""` when the same `result.Error` access is already proven by an `IsErr` guard.
+Do not report `result.Error.Message == ""` or `result.Error.Message != ""` when the same `result.Error` access is already proven by an `IsErr` guard.
 
 - [ ] **Step 3: Add non-diagnostic pseudo-branch boundary tests**
 
@@ -876,7 +898,7 @@ Register operation analysis for invocations.
 Report `OPRESULT005` when:
 
 - Target method is `OpResult.OpResults.Err` or generic `OpResult.OpResults.Err<T>`.
-- The invocation has exactly one argument.
+- The invocation has exactly one argument, or has two arguments where the inner-error argument is a null constant.
 - That argument is direct `result.Error.Message`.
 - The `result.Error` access is proven to be in an `Err` branch by the same local proof helper used for `OPRESULT002`.
 
@@ -941,7 +963,6 @@ Modify `OpResult/OpResult.csproj` to reference the analyzer project for build or
   <ItemGroup>
     <ProjectReference Include="../OpResult.Analyzers/OpResult.Analyzers.csproj"
                       ReferenceOutputAssembly="false"
-                      OutputItemType="Analyzer"
                       PrivateAssets="all" />
   </ItemGroup>
 
@@ -952,6 +973,8 @@ Modify `OpResult/OpResult.csproj` to reference the analyzer project for build or
           Visible="false" />
   </ItemGroup>
 ```
+
+Do not set `OutputItemType="Analyzer"` on this `ProjectReference`; the runtime package project needs the reference for build ordering only. The analyzer DLL is still included in the package by the explicit `<None Pack="true" PackagePath="analyzers/dotnet/cs">` item above.
 
 Keep the existing README pack item unchanged:
 
@@ -979,7 +1002,25 @@ public void OpResultProject_PacksAnalyzerAtNuGetAnalyzerPath()
 }
 ```
 
-- [ ] **Step 3: Verify runtime build still succeeds**
+- [ ] **Step 3: Add package metadata test for analyzer project reference**
+
+Add a test to `OpResult.Tests/PackageMetadataTests.cs`:
+
+```csharp
+[Fact]
+public void OpResultProject_ReferencesAnalyzerProjectOnlyForBuildOrdering()
+{
+    var projectReference = LoadProject()
+        .Descendants("ProjectReference")
+        .Single(element => (string?)element.Attribute("Include") == "../OpResult.Analyzers/OpResult.Analyzers.csproj");
+
+    Assert.Equal("false", (string?)projectReference.Attribute("ReferenceOutputAssembly"));
+    Assert.Equal("all", (string?)projectReference.Attribute("PrivateAssets"));
+    Assert.Null(projectReference.Attribute("OutputItemType"));
+}
+```
+
+- [ ] **Step 4: Verify runtime build still succeeds**
 
 Run:
 

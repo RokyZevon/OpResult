@@ -20,7 +20,7 @@ OpResult 需要通过 analyzer 保护运行时类型系统无法表达的语义�
 
 - 不应在没有证明结果为 `Ok` 时读取 `Value`。
 - 不应在没有证明结果为 `Err` 时读取 `Error`。
-- 不应使用 `Value == null`、`Value != null`、`Error == null`、`Error != null`、`Error.Message == ""` 或 `Error.Message == string.Empty` 判断结果分支。
+- 不应使用 `Value == null`、`Value != null`、`Error == null`、`Error != null`、null pattern 或 `Error.Message` 空/非空消息测试判断结果分支。
 - 不应无意丢弃返回的 `OpResult` / `OpResult<T>`。
 - 上层短路失败时，不应只从 `result.Error.Message` 重建错误而丢失原始 `OpError.InnerError` 链。
 
@@ -135,7 +135,9 @@ Analyzer 只把同一个 receiver expression 上的 guard 当作证明。`first.
 
 Analyzer 也允许同一个短路条件中后续 operand 的安全读取，例如 `if (result.IsOk && result.Value.Id > 0) { }` 与 `if (result.IsOk || result.Error.Message.Length > 0) { }`。该支持只适用于 C# 短路 `&&` / `||` 的求值顺序；如果读取前已有可达写入改变同一个 result，则 guard 证明失效。
 
-集合 / indexer receiver identity 不在当前 PR 中扩展设计；`results[0]` 与 `results[1]` 这类场景后续单独讨论，避免在本 PR 中扩大 analyzer 行为边界。
+Analyzer 识别显式 bool guard 写法和 property-pattern guard 写法，例如 `result.IsOk == true`、`result.IsErr is false` 与 `result is { IsOk: true }`。
+
+集合 / indexer receiver identity 不在当前 PR 中扩展设计；带 arguments 的 property reference 视为不可跟踪，避免用 `results[0]` 的 guard 证明 `results[1]` 这类不同元素。
 
 第一版不识别用户自定义 helper guard：
 
@@ -155,6 +157,9 @@ if (result.Error != null) { }
 if (result.Error == null) { }
 if (result.Error.Message == "") { }
 if (result.Error.Message == string.Empty) { }
+if (result.Error.Message != "") { }
+if (result.Error.Message == System.String.Empty) { }
+if (result.Value is not null) { }
 ```
 
 原因：
@@ -163,7 +168,7 @@ if (result.Error.Message == string.Empty) { }
 - `Ok` 上读取 `Error` 会得到 empty `OpError`。
 - 空 message 是错误展示语义，不是 `Ok` / `Err` 分支语义。
 
-如果已经通过 `IsErr` 证明 failure 分支，则允许对 `result.Error.Message` 做内容检查，例如 `if (result.IsErr) { if (result.Error.Message == "") { } }`。
+如果已经通过 `IsErr` 证明 failure 分支，则允许对 `result.Error.Message` 做内容检查，例如 `if (result.IsErr) { if (result.Error.Message == "") { } }` 或 `if (result.IsErr) { if (result.Error.Message != "") { } }`。
 
 第一版不承诺覆盖 `string.IsNullOrEmpty(result.Error.Message)`、`Length == 0`、局部变量传播或其它等价写法，避免误伤日志、UI 和 telemetry 场景。
 
@@ -201,6 +206,8 @@ if (result.IsErr)
     return OpResults.Err(result.Error.Message);
 }
 ```
+
+如果调用 nullable-inner overload 但显式传入 null inner error，例如 `OpResults.Err(result.Error.Message, null)`，也按同一类直接 message rebuild 处理。
 
 推荐写法：
 

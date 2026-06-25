@@ -26,6 +26,7 @@ public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
         context.RegisterOperationAction(AnalyzeExpressionStatement, OperationKind.ExpressionStatement);
         context.RegisterOperationAction(AnalyzeInvocation, OperationKind.Invocation);
         context.RegisterSyntaxNodeAction(AnalyzeBinaryExpression, SyntaxKind.EqualsExpression, SyntaxKind.NotEqualsExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeIsPatternExpression, SyntaxKind.IsPatternExpression);
     }
 
     private static void AnalyzePropertyReference(OperationAnalysisContext context)
@@ -88,9 +89,9 @@ public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(OperationAnalysisContext context)
     {
         var invocation = (IInvocationOperation)context.Operation;
-        if (!IsSingleArgumentOpResultsErr(invocation, context.Compilation)
+        if (!TryGetOpResultsErrMessageArgument(invocation, context.Compilation, out var messageArgument)
             || !TryGetDirectErrorMessageAccess(
-                invocation.Arguments[0].Value,
+                messageArgument,
                 context.Compilation,
                 out var errorAccess,
                 out var receiverKey)
@@ -127,6 +128,24 @@ public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
             testedExpression));
     }
 
+    private static void AnalyzeIsPatternExpression(SyntaxNodeAnalysisContext context)
+    {
+        var patternExpression = (IsPatternExpressionSyntax)context.Node;
+        if (!OpResultSemanticFacts.TryGetPseudoBranchPatternTestExpression(
+                patternExpression,
+                context.SemanticModel,
+                context.CancellationToken,
+                out var testedExpression))
+        {
+            return;
+        }
+
+        context.ReportDiagnostic(Diagnostic.Create(
+            DiagnosticDescriptors.PseudoBranchTest,
+            patternExpression.GetLocation(),
+            testedExpression));
+    }
+
     private static bool IsInsideNameOf(IOperation operation)
     {
         for (var current = operation.Parent; current is not null; current = current.Parent)
@@ -140,19 +159,47 @@ public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool IsSingleArgumentOpResultsErr(IInvocationOperation invocation, Compilation compilation)
+    private static bool TryGetOpResultsErrMessageArgument(
+        IInvocationOperation invocation,
+        Compilation compilation,
+        out IOperation messageArgument)
     {
-        if (invocation.Arguments.Length != 1)
+        messageArgument = default!;
+
+        if (!IsOpResultsErrMethod(invocation, compilation))
         {
             return false;
         }
 
+        if (invocation.Arguments.Length == 1)
+        {
+            messageArgument = invocation.Arguments[0].Value;
+            return true;
+        }
+
+        if (invocation.Arguments.Length == 2 && IsNullConstant(invocation.Arguments[1].Value))
+        {
+            messageArgument = invocation.Arguments[0].Value;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsOpResultsErrMethod(IInvocationOperation invocation, Compilation compilation)
+    {
         var opResultsType = compilation.GetTypeByMetadataName("OpResult.OpResults");
         var targetMethod = invocation.TargetMethod;
         return opResultsType is not null
             && targetMethod.IsStatic
             && targetMethod.Name == "Err"
             && SymbolEqualityComparer.Default.Equals(targetMethod.ContainingType, opResultsType);
+    }
+
+    private static bool IsNullConstant(IOperation operation)
+    {
+        operation = Unwrap(operation);
+        return operation.ConstantValue.HasValue && operation.ConstantValue.Value is null;
     }
 
     private static bool TryGetDirectErrorMessageAccess(

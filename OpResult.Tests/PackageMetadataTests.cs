@@ -58,6 +58,18 @@ public sealed class PackageMetadataTests
     }
 
     [Fact]
+    public void OpResultProject_ReferencesAnalyzerProjectOnlyForBuildOrdering()
+    {
+        var projectReference = LoadProject()
+            .Descendants("ProjectReference")
+            .Single(element => (string?)element.Attribute("Include") == "../OpResult.Analyzers/OpResult.Analyzers.csproj");
+
+        Assert.Equal("false", (string?)projectReference.Attribute("ReferenceOutputAssembly"));
+        Assert.Equal("all", (string?)projectReference.Attribute("PrivateAssets"));
+        Assert.Null(projectReference.Attribute("OutputItemType"));
+    }
+
+    [Fact]
     public void OpResultProject_PacksAnalyzerAtNuGetAnalyzerPath()
     {
         var analyzerItem = LoadProject()

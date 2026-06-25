@@ -218,7 +218,9 @@ internal static class OpResultSemanticFacts
         }
 
         if (binaryExpression.IsKind(SyntaxKind.EqualsExpression)
-            && (TryGetErrorMessageComparedToEmptyString(
+            || binaryExpression.IsKind(SyntaxKind.NotEqualsExpression))
+        {
+            if (TryGetErrorMessageComparedToEmptyString(
                     binaryExpression.Left,
                     binaryExpression.Right,
                     semanticModel,
@@ -229,12 +231,32 @@ internal static class OpResultSemanticFacts
                     binaryExpression.Left,
                     semanticModel,
                     cancellationToken,
-                    out expressionText)))
-        {
-            return true;
+                    out expressionText))
+            {
+                return true;
+            }
         }
 
         return false;
+    }
+
+    public static bool TryGetPseudoBranchPatternTestExpression(
+        IsPatternExpressionSyntax patternExpression,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken,
+        out string expressionText)
+    {
+        expressionText = string.Empty;
+
+        var testedExpression = StripParentheses(patternExpression.Expression);
+        if (!IsNullPattern(patternExpression.Pattern)
+            || !TryClassifyTrackedPropertyAccess(testedExpression, semanticModel, cancellationToken, out _))
+        {
+            return false;
+        }
+
+        expressionText = testedExpression.ToString();
+        return true;
     }
 
     public static bool IsGuardedAccess(
@@ -283,6 +305,7 @@ internal static class OpResultSemanticFacts
         out OpResultTrackedProperty trackedProperty)
     {
         trackedProperty = default;
+        expression = StripParentheses(expression);
 
         var property = semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol as IPropertySymbol;
         if (property is null)
@@ -354,13 +377,15 @@ internal static class OpResultSemanticFacts
     {
         errorAccess = default!;
         receiverKey = default;
+        expression = StripParentheses(expression);
 
-        if (expression is not MemberAccessExpressionSyntax { Expression: MemberAccessExpressionSyntax errorAccessSyntax })
+        if (expression is not MemberAccessExpressionSyntax messageAccess
+            || StripParentheses(messageAccess.Expression) is not MemberAccessExpressionSyntax errorAccessSyntax)
         {
             return false;
         }
 
-        var property = semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol as IPropertySymbol;
+        var property = semanticModel.GetSymbolInfo(messageAccess, cancellationToken).Symbol as IPropertySymbol;
         if (property is null
             || property.Name != "Message"
             || !IsOpErrorType(property.ContainingType, semanticModel.Compilation))
@@ -380,13 +405,15 @@ internal static class OpResultSemanticFacts
     }
 
     private static bool IsNullLiteral(ExpressionSyntax expression) =>
-        expression.IsKind(SyntaxKind.NullLiteralExpression);
+        StripParentheses(expression).IsKind(SyntaxKind.NullLiteralExpression);
 
     private static bool IsEmptyStringExpression(
         ExpressionSyntax expression,
         SemanticModel semanticModel,
         CancellationToken cancellationToken)
     {
+        expression = StripParentheses(expression);
+
         if (expression is LiteralExpressionSyntax literal
             && literal.IsKind(SyntaxKind.StringLiteralExpression)
             && string.Equals(literal.Token.ValueText, string.Empty, StringComparison.Ordinal))
@@ -394,20 +421,23 @@ internal static class OpResultSemanticFacts
             return true;
         }
 
-        if (expression is not MemberAccessExpressionSyntax
-            {
-                Expression: PredefinedTypeSyntax predefinedType,
-                Name.Identifier.ValueText: "Empty",
-            }
-            || !predefinedType.Keyword.IsKind(SyntaxKind.StringKeyword))
-        {
-            return false;
-        }
-
         var field = semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol as IFieldSymbol;
         return field is not null
             && field.Name == "Empty"
             && field.ContainingType.SpecialType == SpecialType.System_String;
+    }
+
+    private static bool IsNullPattern(PatternSyntax pattern)
+    {
+        pattern = StripPatternParentheses(pattern);
+
+        if (pattern is UnaryPatternSyntax unaryPattern && unaryPattern.IsKind(SyntaxKind.NotPattern))
+        {
+            return IsNullPattern(unaryPattern.Pattern);
+        }
+
+        return pattern is ConstantPatternSyntax { Expression: var expression }
+            && IsNullLiteral(expression);
     }
 
     private static bool IsGuardedByEnclosingCondition(
@@ -580,7 +610,158 @@ internal static class OpResultSemanticFacts
             return true;
         }
 
+        if (condition is IIsPatternOperation pattern
+            && TryGetPatternGuardStates(
+                pattern,
+                compilation,
+                receiverKey,
+                out whenTrueState,
+                out whenFalseState))
+        {
+            return true;
+        }
+
         return TryGetBareGuardStates(condition, compilation, receiverKey, out whenTrueState, out whenFalseState);
+    }
+
+    private static bool TryGetPatternGuardStates(
+        IIsPatternOperation pattern,
+        Compilation compilation,
+        OpResultReceiverKey receiverKey,
+        out OpResultBranchState? whenTrueState,
+        out OpResultBranchState? whenFalseState)
+    {
+        whenTrueState = null;
+        whenFalseState = null;
+
+        if (TryGetBareGuardStates(pattern.Value, compilation, receiverKey, out var guardTrueState, out var guardFalseState)
+            && TryGetBooleanPatternValue(pattern.Pattern, out var literalValue))
+        {
+            whenTrueState = literalValue ? guardTrueState : guardFalseState;
+            whenFalseState = literalValue ? guardFalseState : guardTrueState;
+            return true;
+        }
+
+        if (!TryCreateReceiverKey(pattern.Value, out var candidateReceiverKey)
+            || candidateReceiverKey != receiverKey
+            || pattern.Pattern is not IRecursivePatternOperation recursivePattern)
+        {
+            return false;
+        }
+
+        var hasGuardSubpattern = false;
+        var canUseFalseState = true;
+        var trueStateConflicted = false;
+        var falseStateConflicted = false;
+
+        foreach (var subpattern in recursivePattern.PropertySubpatterns)
+        {
+            if (subpattern.Member is not IPropertyReferenceOperation propertyReference
+                || !IsOpResultLikeType(propertyReference.Property.ContainingType, compilation)
+                || !TryGetBooleanPatternValue(subpattern.Pattern, out literalValue)
+                || !TryGetGuardPropertyStates(
+                    propertyReference.Property,
+                    out guardTrueState,
+                    out guardFalseState))
+            {
+                canUseFalseState = false;
+                continue;
+            }
+
+            hasGuardSubpattern = true;
+
+            if (!trueStateConflicted
+                && !TryMergeCompatibleState(
+                    ref whenTrueState,
+                    literalValue ? guardTrueState : guardFalseState))
+            {
+                trueStateConflicted = true;
+                whenTrueState = null;
+            }
+
+            if (!falseStateConflicted
+                && !TryMergeCompatibleState(
+                    ref whenFalseState,
+                    literalValue ? guardFalseState : guardTrueState))
+            {
+                falseStateConflicted = true;
+                whenFalseState = null;
+            }
+        }
+
+        if (!canUseFalseState || falseStateConflicted)
+        {
+            whenFalseState = null;
+        }
+
+        if (trueStateConflicted)
+        {
+            whenTrueState = null;
+        }
+
+        return hasGuardSubpattern && (whenTrueState is not null || whenFalseState is not null);
+    }
+
+    private static bool TryGetGuardPropertyStates(
+        IPropertySymbol property,
+        out OpResultBranchState? guardTrueState,
+        out OpResultBranchState? guardFalseState)
+    {
+        guardTrueState = null;
+        guardFalseState = null;
+
+        switch (property.Name)
+        {
+            case "IsOk":
+                guardTrueState = OpResultBranchState.Ok;
+                guardFalseState = OpResultBranchState.Err;
+                return true;
+
+            case "IsErr":
+                guardTrueState = OpResultBranchState.Err;
+                guardFalseState = OpResultBranchState.Ok;
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryGetBooleanPatternValue(IPatternOperation pattern, out bool value)
+    {
+        value = false;
+        return pattern.Syntax is PatternSyntax patternSyntax
+            && TryGetBooleanPatternSyntaxValue(patternSyntax, out value);
+    }
+
+    private static bool TryGetBooleanPatternSyntaxValue(PatternSyntax pattern, out bool value)
+    {
+        pattern = StripPatternParentheses(pattern);
+        value = false;
+
+        if (pattern is UnaryPatternSyntax unaryPattern && unaryPattern.IsKind(SyntaxKind.NotPattern))
+        {
+            if (!TryGetBooleanPatternSyntaxValue(unaryPattern.Pattern, out value))
+            {
+                return false;
+            }
+
+            value = !value;
+            return true;
+        }
+
+        if (pattern is not ConstantPatternSyntax { Expression: LiteralExpressionSyntax literal })
+        {
+            return false;
+        }
+
+        if (literal.IsKind(SyntaxKind.TrueLiteralExpression))
+        {
+            value = true;
+            return true;
+        }
+
+        return literal.IsKind(SyntaxKind.FalseLiteralExpression);
     }
 
     private static bool TryGetBareGuardStates(
@@ -792,6 +973,24 @@ internal static class OpResultSemanticFacts
         }
 
         return null;
+    }
+
+    private static bool TryMergeCompatibleState(
+        ref OpResultBranchState? target,
+        OpResultBranchState? candidate)
+    {
+        if (candidate is null)
+        {
+            return true;
+        }
+
+        if (target is null)
+        {
+            target = candidate;
+            return true;
+        }
+
+        return target == candidate;
     }
 
     private static OpResultBranchState? MergeRequiredCompatibleStates(
@@ -1098,7 +1297,7 @@ internal static class OpResultSemanticFacts
             case IFieldReferenceOperation fieldReference:
                 return TryCreateMemberReceiverKey(fieldReference.Instance, fieldReference.Field, "field", out receiverKey);
 
-            case IPropertyReferenceOperation propertyReference:
+            case IPropertyReferenceOperation propertyReference when propertyReference.Arguments.Length == 0:
                 return TryCreateMemberReceiverKey(propertyReference.Instance, propertyReference.Property, "property", out receiverKey);
 
             default:
@@ -1144,6 +1343,26 @@ internal static class OpResultSemanticFacts
                     return operation;
             }
         }
+    }
+
+    private static ExpressionSyntax StripParentheses(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesizedExpression)
+        {
+            expression = parenthesizedExpression.Expression;
+        }
+
+        return expression;
+    }
+
+    private static PatternSyntax StripPatternParentheses(PatternSyntax pattern)
+    {
+        while (pattern is ParenthesizedPatternSyntax parenthesizedPattern)
+        {
+            pattern = parenthesizedPattern.Pattern;
+        }
+
+        return pattern;
     }
 
     private static bool IsOpResultLikeType(INamedTypeSymbol type, Compilation compilation) =>
