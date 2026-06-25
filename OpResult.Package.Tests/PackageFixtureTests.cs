@@ -2,6 +2,7 @@ namespace OpResult.Package.Tests;
 
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Reflection;
 using System.Xml.Linq;
 using Xunit;
 
@@ -9,6 +10,15 @@ public sealed class PackageFixtureTests
 {
     private const string PackageId = "RokyZevon.OpResult";
     private const string AnalyzerPath = "analyzers/dotnet/cs/RokyZevon.OpResult.Analyzers.dll";
+    private const string RequiredConfiguration = "Release";
+
+    [Fact]
+    public void PackageFixture_RejectsNonReleaseConfiguration()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => AssertReleaseConfiguration("Debug"));
+
+        Assert.Contains("dotnet test OpResult.Package.Tests/OpResult.Package.Tests.csproj -c Release", exception.Message, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task PackedPackage_ContainsRuntimeAndAnalyzerAssets()
@@ -85,11 +95,13 @@ public sealed class PackageFixtureTests
 
     private static async Task PackAsync(string packagesDirectory)
     {
+        AssertReleaseConfiguration(GetAssemblyConfiguration());
+
         var result = await RunDotnetAsync(
             "pack",
             "OpResult/OpResult.csproj",
             "-c",
-            "Release",
+            RequiredConfiguration,
             "--no-build",
             "--no-restore",
             "-o",
@@ -98,6 +110,23 @@ public sealed class PackageFixtureTests
 
         Assert.True(result.ExitCode == 0, result.ToString());
     }
+
+    private static void AssertReleaseConfiguration(string configuration)
+    {
+        if (string.Equals(configuration, RequiredConfiguration, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Package fixture tests validate release package outputs and must be run with `dotnet test OpResult.Package.Tests/OpResult.Package.Tests.csproj -c {RequiredConfiguration}`.");
+    }
+
+    private static string GetAssemblyConfiguration() =>
+        typeof(PackageFixtureTests)
+            .Assembly
+            .GetCustomAttribute<AssemblyConfigurationAttribute>()
+            ?.Configuration ?? string.Empty;
 
     private static string GetPackagePath(string packagesDirectory)
     {
