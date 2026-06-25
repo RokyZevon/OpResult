@@ -456,6 +456,8 @@ Update `OpResult.Analyzers/OpResultSemanticFacts.cs` so it can:
   - `if (!result.IsErr) { result.Value; }`
   - `if (result.IsOk && user.Enabled) { result.Value; }`
   - `if (user.Enabled && result.IsOk) { result.Value; }`
+  - `if (result.IsOk && result.Value.Id > 0) { }`
+  - `if (result.IsOk || result.Error.Message.Length > 0) { }`
   - `if (result.IsErr) { result.Error; }`
   - `if (!result.IsOk) { result.Error; }`
   - `else` inverse branches.
@@ -466,6 +468,8 @@ Update `OpResult.Analyzers/OpResultSemanticFacts.cs` so it can:
 - Do not invalidate a proof for sibling member writes such as `holder.Other = 1` after guarding `holder.Cached`.
 - Do not invalidate a proof for writes on paths that exit before the access with `return`, `throw`, or a `continue` that skips the current loop iteration.
 - Preserve short-circuit direction: later right-side guards can prove the post-left-mutation value, while later right-side writes invalidate earlier left-side proofs.
+- Let later operands in a C# short-circuit condition use facts proven by earlier operands, while still invalidating those facts for writes that occur before the guarded access.
+- Do not expand collection / indexer receiver identity in this PR; `results[0]` / `results[1]` requires a separate design pass.
 
 Implementation constraints:
 
@@ -562,6 +566,30 @@ if (Replace(ref result) && result.IsOk)
 ```
 
 Expected: no `OPRESULT001`.
+
+```csharp
+if (result.IsOk && result.Value.Id > 0)
+{
+}
+```
+
+Expected: no `OPRESULT001`.
+
+```csharp
+if (result.IsOk || result.Error.Message.Length > 0)
+{
+}
+```
+
+Expected: no `OPRESULT002`.
+
+```csharp
+if (result.IsOk && Replace(ref result) && result.Value.Id > 0)
+{
+}
+```
+
+Expected: `OPRESULT001`.
 
 ```csharp
 if (result.IsErr)
@@ -858,6 +886,7 @@ Do not report:
 - `result.Error.ToErr("outer")`.
 - `var message = result.Error.Message; OpResults.Err(message);`.
 - `OpResults.Err($"Failed: {result.Error.Message}")`.
+- `OpResults.Err(result.Error!.Message)` in this PR; null-forgiving suppression unwrapping is intentionally left for a future diagnostic-surface decision.
 
 - [ ] **Step 3: Add non-diagnostic chain-preservation tests**
 
@@ -1015,6 +1044,7 @@ Modify `OpResult.slnx`:
 Create `OpResult.Package.Tests/PackageFixtureTests.cs` with tests that:
 
 - Run `dotnet pack OpResult/OpResult.csproj -c Release --no-build --no-restore -o <temp-packages> -p:ContinuousIntegrationBuild=true`.
+- Assert the fixture itself is running under `Release`; if it is launched as Debug or from an IDE default configuration, fail clearly with `dotnet test OpResult.Package.Tests/OpResult.Package.Tests.csproj -c Release`.
 - Locate the single generated `RokyZevon.OpResult.*.nupkg` file in `<temp-packages>` without reading or asserting its version.
 - Inspect the `.nupkg` with `System.IO.Compression.ZipArchive`.
 - Assert these entries exist:

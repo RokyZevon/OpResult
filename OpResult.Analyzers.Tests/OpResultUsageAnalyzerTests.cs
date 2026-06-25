@@ -115,6 +115,82 @@ public sealed class OpResultUsageAnalyzerTests
     }
 
     [Fact]
+    public async Task ValueAccess_InsideShortCircuitConditionAfterIsOk_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: true);
+            if (result.IsOk && result.Value.Id > 0)
+            {
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
+    public async Task ErrorAccess_InsideShortCircuitConditionAfterIsOkFalseBranch_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: false);
+            if (result.IsOk || result.Error.Message.Length > 0)
+            {
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedErrorAccess);
+    }
+
+    [Fact]
+    public async Task ValueAccess_InsideShortCircuitConditionAfterRefMutation_ReportsDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: true);
+            if (result.IsOk && Replace(ref result) && result.Value.Id > 0)
+            {
+            }
+
+            bool Replace(ref global::OpResult.OpResult<User> target)
+            {
+                target = LoadUser(found: false);
+                return true;
+            }
+            """);
+
+        AnalyzerTestHost.AssertDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
+    public async Task ValueAccess_InsideNonShortCircuitAndCondition_ReportsDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: true);
+            if (result.IsOk & result.Value.Id > 0)
+            {
+            }
+            """);
+
+        AnalyzerTestHost.AssertDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
+    public async Task ErrorAccess_InsideNonShortCircuitOrCondition_ReportsDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: false);
+            if (result.IsOk | result.Error.Message.Length > 0)
+            {
+            }
+            """);
+
+        AnalyzerTestHost.AssertDiagnostic(diagnostics, DiagnosticIds.UnguardedErrorAccess);
+    }
+
+    [Fact]
     public async Task ValueAccess_InsidePartialOrBranch_ReportsDiagnostic()
     {
         var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(

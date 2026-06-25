@@ -133,6 +133,10 @@ Use(result.Value);
 
 Analyzer 只把同一个 receiver expression 上的 guard 当作证明。`first.Cached.IsOk` 不能证明 `second.Cached.Value`，同一对象上的 sibling member 写入也不能使已证明的 `holder.Cached` guard 失效。若 guard 后存在能到达读取点的 `ref` / `out` / assignment / deconstruction 写入，则该证明失效；这包括 early-exit guard 的 continuing branch 中的写入。若写入所在路径在读取前通过 `return`、`throw` 或同一 loop iteration 的 `continue` 离开，则不使后续可达读取失效。
 
+Analyzer 也允许同一个短路条件中后续 operand 的安全读取，例如 `if (result.IsOk && result.Value.Id > 0) { }` 与 `if (result.IsOk || result.Error.Message.Length > 0) { }`。该支持只适用于 C# 短路 `&&` / `||` 的求值顺序；如果读取前已有可达写入改变同一个 result，则 guard 证明失效。
+
+集合 / indexer receiver identity 不在当前 PR 中扩展设计；`results[0]` 与 `results[1]` 这类场景后续单独讨论，避免在本 PR 中扩大 analyzer 行为边界。
+
 第一版不识别用户自定义 helper guard：
 
 ```csharp
@@ -226,6 +230,8 @@ return OpResults.Err($"Failed: {result.Error.Message}");
 
 return CreateFailure(result.Error.Message);
 ```
+
+第一版不展开 null-forgiving suppression，例如 `OpResults.Err(result.Error!.Message)` 暂不作为 `OPRESULT005` 匹配范围。
 
 这些场景可能丢失错误链，但需要更强数据流分析，留给后续规则。
 
@@ -325,6 +331,8 @@ README 不应再提 runtime-only 包、analyzer-only 包或 meta package。
 5. runtime compile graph 不暴露 `Microsoft.CodeAnalysis.*` 作为消费者 runtime dependency。
 
 Package fixture tests 是必须项，因为 analyzer 分发是 build-time 行为，不能只靠 analyzer unit tests 或 IDE 验证。
+
+Package fixture tests 验证最终 Release package 形态，必须以 Release 配置运行。Debug 或 IDE 默认配置下不应尝试打包旧的 Release 输出，而应明确失败并提示使用 `dotnet test OpResult.Package.Tests/OpResult.Package.Tests.csproj -c Release`。
 
 ## CI 要求
 

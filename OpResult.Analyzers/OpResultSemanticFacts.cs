@@ -244,7 +244,8 @@ internal static class OpResultSemanticFacts
         OpResultBranchState requiredState)
     {
         return receiverKey.IsValid
-            && (IsGuardedByEnclosingCondition(propertyReference, compilation, receiverKey, requiredState)
+            && (IsGuardedByShortCircuitConditionOperand(propertyReference, compilation, receiverKey, requiredState)
+                || IsGuardedByEnclosingCondition(propertyReference, compilation, receiverKey, requiredState)
                 || IsGuardedByPreviousExitingStatement(propertyReference, compilation, receiverKey, requiredState));
     }
 
@@ -443,6 +444,44 @@ internal static class OpResultSemanticFacts
                 && IsDescendantOf(accessOperation, conditional.WhenFalse)
                 && whenFalseState == requiredState
                 && !HasInvalidatingWriteBeforeAccess(accessOperation, conditional.WhenFalse, receiverKey))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsGuardedByShortCircuitConditionOperand(
+        IOperation accessOperation,
+        Compilation compilation,
+        OpResultReceiverKey receiverKey,
+        OpResultBranchState requiredState)
+    {
+        for (var current = accessOperation.Parent; current is not null; current = current.Parent)
+        {
+            if (current is IAnonymousFunctionOperation or ILocalFunctionOperation)
+            {
+                return false;
+            }
+
+            if (current is not IBinaryOperation binary
+                || !IsDescendantOf(accessOperation, binary.RightOperand)
+                || !TryGetGuardStates(binary.LeftOperand, compilation, receiverKey, out var leftTrueState, out var leftFalseState))
+            {
+                continue;
+            }
+
+            if (binary.OperatorKind == BinaryOperatorKind.ConditionalAnd
+                && leftTrueState == requiredState
+                && !HasInvalidatingWriteBeforeAccess(accessOperation, binary.RightOperand, receiverKey))
+            {
+                return true;
+            }
+
+            if (binary.OperatorKind == BinaryOperatorKind.ConditionalOr
+                && leftFalseState == requiredState
+                && !HasInvalidatingWriteBeforeAccess(accessOperation, binary.RightOperand, receiverKey))
             {
                 return true;
             }
