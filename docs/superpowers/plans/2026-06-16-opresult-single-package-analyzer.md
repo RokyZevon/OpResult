@@ -1115,6 +1115,32 @@ Add a concise `## Analyzer Diagnostics` section documenting:
 - `OPRESULT004`: consume returned `OpResult` values.
 - `OPRESULT005`: preserve `OpError` chains with `ToErr` or `OpResults.Err(message, innerError)`.
 
+State that first-version diagnostics have default severity `warning`.
+
+Include a concrete bad / good guard example, for example:
+
+````markdown
+Bad example:
+
+```csharp
+OpResult<User> result = FindUser(userId);
+return result.Value.DisplayName; // OPRESULT001
+```
+
+Good example:
+
+```csharp
+OpResult<User> result = FindUser(userId);
+
+if (result.IsErr)
+{
+    return $"Could not load user: {result.Error.Message}";
+}
+
+return result.Value.DisplayName;
+```
+````
+
 Include `.editorconfig` example:
 
 ```ini

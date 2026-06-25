@@ -29,6 +29,28 @@ OpResult includes analyzer diagnostics for the core result-flow rules:
 - `OPRESULT004`: consume returned `OpResult` values.
 - `OPRESULT005`: preserve `OpError` chains with `ToErr` or `OpResults.Err(message, innerError)`.
 
+Default severity for first-version diagnostics is `warning`.
+
+Bad example:
+
+```csharp
+OpResult<User> result = FindUser(userId);
+return result.Value.DisplayName; // OPRESULT001
+```
+
+Good example:
+
+```csharp
+OpResult<User> result = FindUser(userId);
+
+if (result.IsErr)
+{
+    return $"Could not load user: {result.Error.Message}";
+}
+
+return result.Value.DisplayName;
+```
+
 Configure diagnostic severity with `.editorconfig`:
 
 ```ini

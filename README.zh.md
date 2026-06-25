@@ -29,6 +29,28 @@ OpResult 包含用于核心 result-flow 规则的 analyzer 诊断：
 - `OPRESULT004`：消费返回的 `OpResult` 值。
 - `OPRESULT005`：使用 `ToErr` 或 `OpResults.Err(message, innerError)` 保留 `OpError` 链。
 
+第一版 diagnostics 默认 severity 是 `warning`。
+
+错误示例：
+
+```csharp
+OpResult<User> result = FindUser(userId);
+return result.Value.DisplayName; // OPRESULT001
+```
+
+正确示例：
+
+```csharp
+OpResult<User> result = FindUser(userId);
+
+if (result.IsErr)
+{
+    return $"Could not load user: {result.Error.Message}";
+}
+
+return result.Value.DisplayName;
+```
+
 使用 `.editorconfig` 配置诊断级别：
 
 ```ini
