@@ -20,6 +20,135 @@ internal enum OpResultTrackedProperty
     Error,
 }
 
+internal readonly struct OpResultReceiverKey : IEquatable<OpResultReceiverKey>
+{
+    private readonly ImmutableArray<OpResultReceiverSegment> _segments;
+
+    private OpResultReceiverKey(ImmutableArray<OpResultReceiverSegment> segments)
+    {
+        _segments = segments;
+    }
+
+    public bool IsValid => !_segments.IsDefaultOrEmpty;
+
+    public static OpResultReceiverKey Create(string kind, ISymbol? symbol) =>
+        new(ImmutableArray.Create(new OpResultReceiverSegment(kind, symbol)));
+
+    public OpResultReceiverKey Append(string kind, ISymbol? symbol)
+    {
+        if (!IsValid)
+        {
+            return Create(kind, symbol);
+        }
+
+        return new OpResultReceiverKey(_segments.Add(new OpResultReceiverSegment(kind, symbol)));
+    }
+
+    public bool StartsWith(OpResultReceiverKey prefix)
+    {
+        if (!IsValid || !prefix.IsValid || prefix._segments.Length > _segments.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < prefix._segments.Length; index++)
+        {
+            if (!_segments[index].Equals(prefix._segments[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public bool Equals(OpResultReceiverKey other)
+    {
+        if (IsValid != other.IsValid)
+        {
+            return false;
+        }
+
+        if (!IsValid)
+        {
+            return true;
+        }
+
+        if (_segments.Length != other._segments.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < _segments.Length; index++)
+        {
+            if (!_segments[index].Equals(other._segments[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) =>
+        obj is OpResultReceiverKey other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        if (!IsValid)
+        {
+            return 0;
+        }
+
+        unchecked
+        {
+            var hashCode = 17;
+            foreach (var segment in _segments)
+            {
+                hashCode = (hashCode * 31) + segment.GetHashCode();
+            }
+
+            return hashCode;
+        }
+    }
+
+    public static bool operator ==(OpResultReceiverKey left, OpResultReceiverKey right) =>
+        left.Equals(right);
+
+    public static bool operator !=(OpResultReceiverKey left, OpResultReceiverKey right) =>
+        !left.Equals(right);
+}
+
+internal readonly struct OpResultReceiverSegment : IEquatable<OpResultReceiverSegment>
+{
+    private readonly string _kind;
+    private readonly ISymbol? _symbol;
+
+    public OpResultReceiverSegment(string kind, ISymbol? symbol)
+    {
+        _kind = kind;
+        _symbol = symbol;
+    }
+
+    public bool Equals(OpResultReceiverSegment other) =>
+        string.Equals(_kind, other._kind, StringComparison.Ordinal)
+        && SymbolEqualityComparer.Default.Equals(_symbol, other._symbol);
+
+    public override bool Equals(object? obj) =>
+        obj is OpResultReceiverSegment other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            var symbolHashCode = _symbol is null
+                ? 0
+                : SymbolEqualityComparer.Default.GetHashCode(_symbol);
+            return (StringComparer.Ordinal.GetHashCode(_kind) * 31) + symbolHashCode;
+        }
+    }
+}
+
 internal static class OpResultSemanticFacts
 {
     public static bool IsOpResultType(ITypeSymbol? type, Compilation compilation)
@@ -36,10 +165,10 @@ internal static class OpResultSemanticFacts
         IPropertyReferenceOperation propertyReference,
         Compilation compilation,
         out OpResultTrackedProperty trackedProperty,
-        out ISymbol? receiverSymbol)
+        out OpResultReceiverKey receiverKey)
     {
         trackedProperty = default;
-        receiverSymbol = default;
+        receiverKey = default;
 
         if (propertyReference.Instance is null)
         {
@@ -52,7 +181,7 @@ internal static class OpResultSemanticFacts
             return false;
         }
 
-        receiverSymbol = GetReferencedSymbol(propertyReference.Instance);
+        TryCreateReceiverKey(propertyReference.Instance, out receiverKey);
         return true;
     }
 
@@ -111,11 +240,12 @@ internal static class OpResultSemanticFacts
     public static bool IsGuardedAccess(
         IPropertyReferenceOperation propertyReference,
         Compilation compilation,
-        ISymbol receiverSymbol,
+        OpResultReceiverKey receiverKey,
         OpResultBranchState requiredState)
     {
-        return IsGuardedByEnclosingCondition(propertyReference, compilation, receiverSymbol, requiredState)
-            || IsGuardedByImmediatePreviousStatement(propertyReference, compilation, receiverSymbol, requiredState);
+        return receiverKey.IsValid
+            && (IsGuardedByEnclosingCondition(propertyReference, compilation, receiverKey, requiredState)
+                || IsGuardedByPreviousExitingStatement(propertyReference, compilation, receiverKey, requiredState));
     }
 
     private static bool IsTrackedProperty(
@@ -191,7 +321,21 @@ internal static class OpResultSemanticFacts
         expressionText = string.Empty;
 
         if (!IsEmptyStringExpression(emptyStringExpression, semanticModel, cancellationToken)
-            || !TryClassifyErrorMessageAccess(candidateExpression, semanticModel, cancellationToken))
+            || !TryClassifyErrorMessageAccess(
+                candidateExpression,
+                semanticModel,
+                cancellationToken,
+                out var errorAccess,
+                out var receiverKey))
+        {
+            return false;
+        }
+
+        if (OpResultSemanticFacts.IsGuardedAccess(
+                errorAccess,
+                semanticModel.Compilation,
+                receiverKey,
+                OpResultBranchState.Err))
         {
             return false;
         }
@@ -203,9 +347,14 @@ internal static class OpResultSemanticFacts
     private static bool TryClassifyErrorMessageAccess(
         ExpressionSyntax expression,
         SemanticModel semanticModel,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        out IPropertyReferenceOperation errorAccess,
+        out OpResultReceiverKey receiverKey)
     {
-        if (expression is not MemberAccessExpressionSyntax { Expression: MemberAccessExpressionSyntax errorAccess })
+        errorAccess = default!;
+        receiverKey = default;
+
+        if (expression is not MemberAccessExpressionSyntax { Expression: MemberAccessExpressionSyntax errorAccessSyntax })
         {
             return false;
         }
@@ -218,8 +367,15 @@ internal static class OpResultSemanticFacts
             return false;
         }
 
-        return TryClassifyTrackedPropertyAccess(errorAccess, semanticModel, cancellationToken, out var trackedProperty)
-            && trackedProperty == OpResultTrackedProperty.Error;
+        if (semanticModel.GetOperation(errorAccessSyntax, cancellationToken) is not IPropertyReferenceOperation errorReference
+            || !TryClassifyTrackedProperty(errorReference, semanticModel.Compilation, out var trackedProperty, out receiverKey)
+            || trackedProperty != OpResultTrackedProperty.Error)
+        {
+            return false;
+        }
+
+        errorAccess = errorReference;
+        return true;
     }
 
     private static bool IsNullLiteral(ExpressionSyntax expression) =>
@@ -256,7 +412,7 @@ internal static class OpResultSemanticFacts
     private static bool IsGuardedByEnclosingCondition(
         IOperation accessOperation,
         Compilation compilation,
-        ISymbol receiverSymbol,
+        OpResultReceiverKey receiverKey,
         OpResultBranchState requiredState)
     {
         for (var current = accessOperation.Parent; current is not null; current = current.Parent)
@@ -271,14 +427,14 @@ internal static class OpResultSemanticFacts
                 continue;
             }
 
-            if (!TryGetGuardStates(conditional.Condition, compilation, receiverSymbol, out var whenTrueState, out var whenFalseState))
+            if (!TryGetGuardStates(conditional.Condition, compilation, receiverKey, out var whenTrueState, out var whenFalseState))
             {
                 continue;
             }
 
             if (IsDescendantOf(accessOperation, conditional.WhenTrue)
                 && whenTrueState == requiredState
-                && !HasInvalidatingAssignmentBeforeAccess(accessOperation, conditional.WhenTrue, receiverSymbol))
+                && !HasInvalidatingWriteBeforeAccess(accessOperation, conditional.WhenTrue, receiverKey))
             {
                 return true;
             }
@@ -286,7 +442,7 @@ internal static class OpResultSemanticFacts
             if (conditional.WhenFalse is not null
                 && IsDescendantOf(accessOperation, conditional.WhenFalse)
                 && whenFalseState == requiredState
-                && !HasInvalidatingAssignmentBeforeAccess(accessOperation, conditional.WhenFalse, receiverSymbol))
+                && !HasInvalidatingWriteBeforeAccess(accessOperation, conditional.WhenFalse, receiverKey))
             {
                 return true;
             }
@@ -295,10 +451,10 @@ internal static class OpResultSemanticFacts
         return false;
     }
 
-    private static bool IsGuardedByImmediatePreviousStatement(
+    private static bool IsGuardedByPreviousExitingStatement(
         IOperation accessOperation,
         Compilation compilation,
-        ISymbol receiverSymbol,
+        OpResultReceiverKey receiverKey,
         OpResultBranchState requiredState)
     {
         var statement = GetContainingStatement(accessOperation);
@@ -314,20 +470,40 @@ internal static class OpResultSemanticFacts
             return false;
         }
 
-        if (statements[statementIndex - 1] is not IConditionalOperation conditional
-            || conditional.WhenFalse is not null
-            || !TryGetGuardStates(conditional.Condition, compilation, receiverSymbol, out var whenTrueState, out var whenFalseState))
+        for (var index = statementIndex - 1; index >= 0; index--)
         {
-            return false;
+            if (statements[index] is IConditionalOperation conditional
+                && TryGetGuardStates(conditional.Condition, compilation, receiverKey, out var whenTrueState, out var whenFalseState))
+            {
+                if (DoesOperationExitBeforeAccess(conditional.WhenTrue, accessOperation)
+                    && whenFalseState == requiredState
+                    && !HasReachingInvalidatingWrite(conditional.WhenFalse, accessOperation, receiverKey))
+                {
+                    return true;
+                }
+
+                if (conditional.WhenFalse is not null
+                    && DoesOperationExitBeforeAccess(conditional.WhenFalse, accessOperation)
+                    && whenTrueState == requiredState
+                    && !HasReachingInvalidatingWrite(conditional.WhenTrue, accessOperation, receiverKey))
+                {
+                    return true;
+                }
+            }
+
+            if (HasReachingInvalidatingWrite(statements[index], accessOperation, receiverKey))
+            {
+                return false;
+            }
         }
 
-        return DoesOperationExit(conditional.WhenTrue) && whenFalseState == requiredState;
+        return false;
     }
 
     private static bool TryGetGuardStates(
         IOperation condition,
         Compilation compilation,
-        ISymbol receiverSymbol,
+        OpResultReceiverKey receiverKey,
         out OpResultBranchState? whenTrueState,
         out OpResultBranchState? whenFalseState)
     {
@@ -338,7 +514,7 @@ internal static class OpResultSemanticFacts
 
         if (condition is IUnaryOperation { OperatorKind: UnaryOperatorKind.Not } unary)
         {
-            if (!TryGetGuardStates(unary.Operand, compilation, receiverSymbol, out var operandTrueState, out var operandFalseState))
+            if (!TryGetGuardStates(unary.Operand, compilation, receiverKey, out var operandTrueState, out var operandFalseState))
             {
                 return false;
             }
@@ -352,7 +528,7 @@ internal static class OpResultSemanticFacts
             && TryGetBinaryGuardStates(
                 binary,
                 compilation,
-                receiverSymbol,
+                receiverKey,
                 out whenTrueState,
                 out whenFalseState))
         {
@@ -361,7 +537,8 @@ internal static class OpResultSemanticFacts
 
         if (condition is not IPropertyReferenceOperation propertyReference
             || propertyReference.Instance is null
-            || !SymbolEqualityComparer.Default.Equals(GetReferencedSymbol(propertyReference.Instance), receiverSymbol)
+            || !TryCreateReceiverKey(propertyReference.Instance, out var candidateReceiverKey)
+            || candidateReceiverKey != receiverKey
             || !IsOpResultLikeType(propertyReference.Property.ContainingType, compilation))
         {
             return false;
@@ -387,7 +564,7 @@ internal static class OpResultSemanticFacts
     private static bool TryGetBinaryGuardStates(
         IBinaryOperation binary,
         Compilation compilation,
-        ISymbol receiverSymbol,
+        OpResultReceiverKey receiverKey,
         out OpResultBranchState? whenTrueState,
         out OpResultBranchState? whenFalseState)
     {
@@ -402,13 +579,13 @@ internal static class OpResultSemanticFacts
         var hasLeftGuard = TryGetGuardStates(
             binary.LeftOperand,
             compilation,
-            receiverSymbol,
+            receiverKey,
             out var leftTrueState,
             out var leftFalseState);
         var hasRightGuard = TryGetGuardStates(
             binary.RightOperand,
             compilation,
-            receiverSymbol,
+            receiverKey,
             out var rightTrueState,
             out var rightFalseState);
 
@@ -417,9 +594,18 @@ internal static class OpResultSemanticFacts
             return false;
         }
 
+        var rightHasInvalidatingWrite = ContainsInvalidatingWrite(binary.RightOperand, receiverKey);
+
         if (IsBooleanConjunction(binary.OperatorKind))
         {
-            whenTrueState = MergeCompatibleStates(leftTrueState, rightTrueState);
+            var leftProofState = hasLeftGuard && !rightHasInvalidatingWrite
+                ? MergeCompatibleStates(leftTrueState, rightTrueState)
+                : null;
+            var rightProofState = hasRightGuard
+                ? rightTrueState
+                : null;
+
+            whenTrueState = MergeCompatibleStates(leftProofState, rightProofState);
             whenFalseState = hasLeftGuard && hasRightGuard
                 ? MergeCompatibleStates(leftFalseState, rightFalseState)
                 : null;
@@ -429,7 +615,14 @@ internal static class OpResultSemanticFacts
             whenTrueState = hasLeftGuard && hasRightGuard
                 ? MergeCompatibleStates(leftTrueState, rightTrueState)
                 : null;
-            whenFalseState = MergeCompatibleStates(leftFalseState, rightFalseState);
+            var leftProofState = hasLeftGuard && !rightHasInvalidatingWrite
+                ? leftFalseState
+                : null;
+            var rightProofState = hasRightGuard
+                ? rightFalseState
+                : null;
+
+            whenFalseState = MergeCompatibleStates(leftProofState, rightProofState);
         }
 
         return whenTrueState is not null || whenFalseState is not null;
@@ -458,7 +651,7 @@ internal static class OpResultSemanticFacts
         return null;
     }
 
-    private static bool DoesOperationExit(IOperation operation)
+    private static bool DoesOperationExitBeforeAccess(IOperation operation, IOperation accessOperation)
     {
         operation = Unwrap(operation);
 
@@ -469,16 +662,27 @@ internal static class OpResultSemanticFacts
                 return false;
             }
 
-            return DoesOperationExit(block.Operations[block.Operations.Length - 1]);
+            return DoesOperationExitBeforeAccess(block.Operations[block.Operations.Length - 1], accessOperation);
         }
 
-        return operation is IReturnOperation or IThrowOperation;
+        if (operation is IConditionalOperation conditional)
+        {
+            return conditional.WhenFalse is not null
+                && DoesOperationExitBeforeAccess(conditional.WhenTrue, accessOperation)
+                && DoesOperationExitBeforeAccess(conditional.WhenFalse, accessOperation);
+        }
+
+        return operation is IReturnOperation
+            || operation is IThrowOperation
+            || (operation is IBranchOperation branch
+                && branch.BranchKind == BranchKind.Continue
+                && DoesContinueSkipAccess(branch, accessOperation));
     }
 
-    private static bool HasInvalidatingAssignmentBeforeAccess(
+    private static bool HasInvalidatingWriteBeforeAccess(
         IOperation accessOperation,
         IOperation guardedBranch,
-        ISymbol receiverSymbol)
+        OpResultReceiverKey receiverKey)
     {
         var accessStart = accessOperation.Syntax.SpanStart;
         var accessFunctionBoundary = GetContainingFunctionBoundary(accessOperation);
@@ -491,7 +695,8 @@ internal static class OpResultSemanticFacts
                 continue;
             }
 
-            if (IsInvalidatingWrite(operation, receiverSymbol))
+            if (IsInvalidatingWrite(operation, receiverKey)
+                && !IsInsidePathThatExitsBeforeAccess(operation, accessOperation))
             {
                 return true;
             }
@@ -500,39 +705,146 @@ internal static class OpResultSemanticFacts
         return false;
     }
 
-    private static bool IsInvalidatingWrite(IOperation operation, ISymbol receiverSymbol) =>
-        operation switch
-        {
-            ISimpleAssignmentOperation assignment =>
-                ReferencesSymbol(assignment.Target, receiverSymbol),
-            IDeconstructionAssignmentOperation deconstruction =>
-                ReferencesSymbol(deconstruction.Target, receiverSymbol),
-            IArgumentOperation argument when IsWriteArgument(argument) =>
-                ReferencesSymbol(argument.Value, receiverSymbol),
-            _ => false,
-        };
-
-    private static bool IsWriteArgument(IArgumentOperation argument) =>
-        argument.Parameter?.RefKind is RefKind.Ref or RefKind.Out;
-
-    private static bool ReferencesSymbol(IOperation operation, ISymbol receiverSymbol)
+    private static bool HasReachingInvalidatingWrite(
+        IOperation? operation,
+        IOperation accessOperation,
+        OpResultReceiverKey receiverKey)
     {
-        operation = Unwrap(operation);
-
-        if (SymbolEqualityComparer.Default.Equals(GetReferencedSymbol(operation), receiverSymbol))
+        if (operation is null)
         {
-            return true;
+            return false;
         }
 
-        foreach (var child in operation.ChildOperations)
+        var accessFunctionBoundary = GetContainingFunctionBoundary(accessOperation);
+
+        foreach (var descendant in EnumerateOperations(operation))
         {
-            if (ReferencesSymbol(child, receiverSymbol))
+            if (!HasSameFunctionBoundary(descendant, accessFunctionBoundary))
+            {
+                continue;
+            }
+
+            if (IsInvalidatingWrite(descendant, receiverKey)
+                && !IsInsidePathThatExitsBeforeAccess(descendant, accessOperation))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static bool ContainsInvalidatingWrite(IOperation operation, OpResultReceiverKey receiverKey)
+    {
+        foreach (var descendant in EnumerateOperations(operation))
+        {
+            if (IsInvalidatingWrite(descendant, receiverKey))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsInvalidatingWrite(IOperation operation, OpResultReceiverKey receiverKey) =>
+        operation switch
+        {
+            ISimpleAssignmentOperation assignment =>
+                ReferencesReceiver(assignment.Target, receiverKey),
+            IDeconstructionAssignmentOperation deconstruction =>
+                ReferencesReceiver(deconstruction.Target, receiverKey),
+            IArgumentOperation argument when IsWriteArgument(argument) =>
+                ReferencesReceiver(argument.Value, receiverKey),
+            _ => false,
+        };
+
+    private static bool IsWriteArgument(IArgumentOperation argument) =>
+        argument.Parameter?.RefKind is RefKind.Ref or RefKind.Out;
+
+    private static bool ReferencesReceiver(IOperation operation, OpResultReceiverKey receiverKey)
+    {
+        operation = Unwrap(operation);
+
+        if (TryCreateReceiverKey(operation, out var candidateReceiverKey))
+        {
+            return AreRelatedReceiverKeys(candidateReceiverKey, receiverKey);
+        }
+
+        foreach (var child in operation.ChildOperations)
+        {
+            if (ReferencesReceiver(child, receiverKey))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool AreRelatedReceiverKeys(OpResultReceiverKey candidateReceiverKey, OpResultReceiverKey receiverKey) =>
+        candidateReceiverKey == receiverKey
+        || receiverKey.StartsWith(candidateReceiverKey)
+        || candidateReceiverKey.StartsWith(receiverKey);
+
+    private static bool IsInsidePathThatExitsBeforeAccess(IOperation operation, IOperation accessOperation)
+    {
+        for (var current = operation; current is not null; current = current.Parent)
+        {
+            if (current.Parent is not IBlockOperation block || IsDescendantOf(accessOperation, block))
+            {
+                continue;
+            }
+
+            var statementIndex = IndexOf(block.Operations, current);
+            if (statementIndex >= 0 && DoesStatementSuffixExitBeforeAccess(block, statementIndex, accessOperation))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool DoesStatementSuffixExitBeforeAccess(
+        IBlockOperation block,
+        int startIndex,
+        IOperation accessOperation)
+    {
+        for (var index = block.Operations.Length - 1; index >= startIndex; index--)
+        {
+            if (DoesOperationExitBeforeAccess(block.Operations[index], accessOperation))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool DoesContinueSkipAccess(IBranchOperation branch, IOperation accessOperation)
+    {
+        var loopSyntax = GetContainingLoopSyntax(branch.Syntax);
+        return loopSyntax is not null
+            && loopSyntax.Span.Contains(accessOperation.Syntax.SpanStart)
+            && branch.Syntax.SpanStart < accessOperation.Syntax.SpanStart;
+    }
+
+    private static SyntaxNode? GetContainingLoopSyntax(SyntaxNode syntax)
+    {
+        for (var current = syntax.Parent; current is not null; current = current.Parent)
+        {
+            if (current is ForStatementSyntax
+                or ForEachStatementSyntax
+                or ForEachVariableStatementSyntax
+                or WhileStatementSyntax
+                or DoStatementSyntax)
+            {
+                return current;
+            }
+        }
+
+        return null;
     }
 
     private static IOperation? GetContainingStatement(IOperation operation)
@@ -610,18 +922,56 @@ internal static class OpResultSemanticFacts
         return false;
     }
 
-    private static ISymbol? GetReferencedSymbol(IOperation operation)
+    private static bool TryCreateReceiverKey(IOperation operation, out OpResultReceiverKey receiverKey)
     {
+        receiverKey = default;
         operation = Unwrap(operation);
 
-        return operation switch
+        switch (operation)
         {
-            ILocalReferenceOperation localReference => localReference.Local,
-            IParameterReferenceOperation parameterReference => parameterReference.Parameter,
-            IFieldReferenceOperation fieldReference => fieldReference.Field,
-            IPropertyReferenceOperation propertyReference => propertyReference.Property,
-            _ => null,
-        };
+            case ILocalReferenceOperation localReference:
+                receiverKey = OpResultReceiverKey.Create("local", localReference.Local);
+                return true;
+
+            case IParameterReferenceOperation parameterReference:
+                receiverKey = OpResultReceiverKey.Create("parameter", parameterReference.Parameter);
+                return true;
+
+            case IInstanceReferenceOperation:
+                receiverKey = OpResultReceiverKey.Create("instance", null);
+                return true;
+
+            case IFieldReferenceOperation fieldReference:
+                return TryCreateMemberReceiverKey(fieldReference.Instance, fieldReference.Field, "field", out receiverKey);
+
+            case IPropertyReferenceOperation propertyReference:
+                return TryCreateMemberReceiverKey(propertyReference.Instance, propertyReference.Property, "property", out receiverKey);
+
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryCreateMemberReceiverKey(
+        IOperation? instance,
+        ISymbol member,
+        string kind,
+        out OpResultReceiverKey receiverKey)
+    {
+        if (instance is null)
+        {
+            receiverKey = OpResultReceiverKey.Create(kind, member);
+            return true;
+        }
+
+        if (!TryCreateReceiverKey(instance, out var instanceKey))
+        {
+            receiverKey = default;
+            return false;
+        }
+
+        receiverKey = instanceKey.Append(kind, member);
+        return true;
     }
 
     private static IOperation Unwrap(IOperation operation)

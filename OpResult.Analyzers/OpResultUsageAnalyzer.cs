@@ -40,16 +40,16 @@ public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
                 propertyReference,
                 context.Compilation,
                 out var trackedProperty,
-                out var receiverSymbol))
+                out var receiverKey))
         {
             return;
         }
 
-        if (receiverSymbol is not null
+        if (receiverKey.IsValid
             && OpResultSemanticFacts.IsGuardedAccess(
                 propertyReference,
                 context.Compilation,
-                receiverSymbol,
+                receiverKey,
                 OpResultSemanticFacts.GetRequiredState(trackedProperty)))
         {
             return;
@@ -93,12 +93,12 @@ public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
                 invocation.Arguments[0].Value,
                 context.Compilation,
                 out var errorAccess,
-                out var receiverSymbol)
-            || receiverSymbol is null
+                out var receiverKey)
+            || !receiverKey.IsValid
             || !OpResultSemanticFacts.IsGuardedAccess(
                 errorAccess,
                 context.Compilation,
-                receiverSymbol,
+                receiverKey,
                 OpResultBranchState.Err))
         {
             return;
@@ -159,10 +159,10 @@ public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
         IOperation operation,
         Compilation compilation,
         out IPropertyReferenceOperation errorAccess,
-        out ISymbol? receiverSymbol)
+        out OpResultReceiverKey receiverKey)
     {
         errorAccess = default!;
-        receiverSymbol = default;
+        receiverKey = default;
 
         operation = Unwrap(operation);
         if (operation is not IPropertyReferenceOperation messageAccess
@@ -178,7 +178,7 @@ public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
                 candidateErrorAccess,
                 compilation,
                 out var trackedProperty,
-                out receiverSymbol)
+                out receiverKey)
             || trackedProperty != OpResultTrackedProperty.Error)
         {
             return false;

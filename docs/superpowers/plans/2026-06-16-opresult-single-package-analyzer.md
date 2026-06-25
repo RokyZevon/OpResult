@@ -450,18 +450,26 @@ Update `OpResult.Analyzers/OpResultSemanticFacts.cs` so it can:
 
 - Identify `OpResult` and `OpResult<T>` symbols by namespace `OpResult` and name `OpResult`.
 - Identify property references named `Value`, `Error`, `IsOk`, and `IsErr`.
-- Compare receiver symbols using `SymbolEqualityComparer.Default`.
+- Compare receiver identity with a structured receiver key, not a bare member symbol. The key must distinguish `first.Cached` from `second.Cached` while still matching repeated reads of the same receiver expression.
 - Recognize local branch proof patterns:
   - `if (result.IsOk) { result.Value; }`
   - `if (!result.IsErr) { result.Value; }`
+  - `if (result.IsOk && user.Enabled) { result.Value; }`
+  - `if (user.Enabled && result.IsOk) { result.Value; }`
   - `if (result.IsErr) { result.Error; }`
   - `if (!result.IsOk) { result.Error; }`
   - `else` inverse branches.
-  - immediate earlier early-return guard in the same block.
+  - early-return guards in the same block, including harmless statements between the guard and access.
+  - loop-local `continue` guards that skip the current unsafe branch.
+- Invalidate a proof when a reaching write changes the same receiver after the proof. Writes include assignment, deconstruction, and `ref` / `out` arguments.
+- Invalidate early-exit proofs when the continuing branch writes the same receiver before the later access.
+- Do not invalidate a proof for sibling member writes such as `holder.Other = 1` after guarding `holder.Cached`.
+- Do not invalidate a proof for writes on paths that exit before the access with `return`, `throw`, or a `continue` that skips the current loop iteration.
+- Preserve short-circuit direction: later right-side guards can prove the post-left-mutation value, while later right-side writes invalidate earlier left-side proofs.
 
 Implementation constraints:
 
-- Use `SemanticModel.GetSymbolInfo(...)` for receiver identity.
+- Use Roslyn symbols inside the receiver key; do not use syntax text alone for receiver identity.
 - Do not use string-only matching for type identity.
 - Do not recognize custom guard helper methods.
 - Do not treat `result.OnOk(...); result.Value` as proof.
@@ -515,6 +523,97 @@ else
 ```
 
 Each test should assert no `OPRESULT001` / `OPRESULT002`.
+
+Also append PR review regression tests covering:
+
+```csharp
+if (first.Cached.IsOk)
+{
+    _ = second.Cached.Value;
+}
+```
+
+Expected: `OPRESULT001`.
+
+```csharp
+if (holder.Cached.IsOk)
+{
+    holder.Other = 1;
+    _ = holder.Cached.Value;
+}
+```
+
+Expected: no `OPRESULT001`.
+
+```csharp
+if (result.IsOk && Replace(ref result))
+{
+    _ = result.Value;
+}
+```
+
+Expected: `OPRESULT001`.
+
+```csharp
+if (Replace(ref result) && result.IsOk)
+{
+    _ = result.Value;
+}
+```
+
+Expected: no `OPRESULT001`.
+
+```csharp
+if (result.IsErr)
+{
+    return;
+}
+var id = 1;
+_ = result.Value;
+```
+
+Expected: no `OPRESULT001`.
+
+```csharp
+for (var i = 0; i < 1; i++)
+{
+    if (result.IsErr)
+    {
+        continue;
+    }
+    _ = result.Value;
+}
+```
+
+Expected: no `OPRESULT001`.
+
+```csharp
+if (result.IsErr)
+{
+    return;
+}
+else
+{
+    result = LoadUser(found: false);
+}
+_ = result.Value;
+```
+
+Expected: `OPRESULT001`.
+
+```csharp
+if (result.IsOk)
+{
+    for (var i = 0; i < 1; i++)
+    {
+        result = LoadUser(found: false);
+        continue;
+    }
+    _ = result.Value;
+}
+```
+
+Expected: `OPRESULT001`.
 
 - [ ] **Step 5: Verify focused analyzer tests**
 
@@ -589,6 +688,7 @@ Report `OPRESULT003` only for these exact patterns:
 - `result.Error.Message == string.Empty`
 
 Do not report `string.IsNullOrEmpty(result.Error.Message)` or `result.Error.Message.Length == 0`.
+Do not report `result.Error.Message == ""` when the same `result.Error` access is already proven by an `IsErr` guard.
 
 - [ ] **Step 3: Add non-diagnostic pseudo-branch boundary tests**
 
@@ -608,6 +708,16 @@ var result = LoadUser(found: false);
 if (result.IsErr)
 {
     _ = result.Error.Message.Length == 0;
+}
+```
+
+```csharp
+var result = LoadUser(found: false);
+if (result.IsErr)
+{
+    if (result.Error.Message == "")
+    {
+    }
 }
 ```
 
