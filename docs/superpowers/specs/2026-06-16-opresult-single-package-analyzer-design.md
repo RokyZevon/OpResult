@@ -114,7 +114,8 @@ README.md
 
 - 同方法内 `IsOk` / `IsErr` guard。
 - 否定 guard，例如 `!result.IsErr` 和 `!result.IsOk`。
-- early return guard，例如 `if (result.IsErr) return ...; result.Value`。
+- 短路组合 guard，例如 `if (result.IsOk && user.Enabled) { result.Value; }` 和 `if (user.Enabled && result.IsOk) { result.Value; }`。
+- early return / loop continue guard，例如 `if (result.IsErr) return ...; result.Value` 和 loop 内 `if (result.IsErr) continue; result.Value`。
 - `else` 分支中的对应访问。
 - `Match` / `MatchAsync` 分支参数。
 - `Then` / `ThenAsync` 的 success callback 参数。
@@ -129,6 +130,8 @@ Use(result.Value);
 ```
 
 `OnOk` / `OnErr` 是副作用 API，不改变调用点之后的控制流事实。
+
+Analyzer 只把同一个 receiver expression 上的 guard 当作证明。`first.Cached.IsOk` 不能证明 `second.Cached.Value`，同一对象上的 sibling member 写入也不能使已证明的 `holder.Cached` guard 失效。若 guard 后存在能到达读取点的 `ref` / `out` / assignment / deconstruction 写入，则该证明失效；这包括 early-exit guard 的 continuing branch 中的写入。若写入所在路径在读取前通过 `return`、`throw` 或同一 loop iteration 的 `continue` 离开，则不使后续可达读取失效。
 
 第一版不识别用户自定义 helper guard：
 
@@ -155,6 +158,8 @@ if (result.Error.Message == string.Empty) { }
 - `Err` 上读取 `Value` 会得到 `default(T)`。
 - `Ok` 上读取 `Error` 会得到 empty `OpError`。
 - 空 message 是错误展示语义，不是 `Ok` / `Err` 分支语义。
+
+如果已经通过 `IsErr` 证明 failure 分支，则允许对 `result.Error.Message` 做内容检查，例如 `if (result.IsErr) { if (result.Error.Message == "") { } }`。
 
 第一版不承诺覆盖 `string.IsNullOrEmpty(result.Error.Message)`、`Length == 0`、局部变量传播或其它等价写法，避免误伤日志、UI 和 telemetry 场景。
 
