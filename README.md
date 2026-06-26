@@ -145,8 +145,6 @@ OpResult<User> FindUser(Guid id)
 }
 ```
 
-`OpResults.Err<T>(...)` remains available as an explicit compatibility form, but new code should prefer `OpResults.Err(...)` and let the target result type perform the conversion.
-
 A non-null `T` can also be returned directly as a successful `OpResult<T>`:
 
 ```csharp

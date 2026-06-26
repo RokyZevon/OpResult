@@ -843,7 +843,7 @@ public sealed class OpResultUsageAnalyzerTests
 
             public sealed class Probe
             {
-                public OpResult<User> Cached { get; set; } = OpResults.Err<User>("not found");
+                public OpResult<User> Cached { get; set; } = OpResults.Err("not found");
 
                 public void Run()
                 {
@@ -912,7 +912,7 @@ public sealed class OpResultUsageAnalyzerTests
             {
                 public OpResult<User> this[int index] => index == 0
                     ? OpResults.Ok(new User(1))
-                    : OpResults.Err<User>("not found");
+                    : OpResults.Err("not found");
             }
 
             public sealed class Probe
@@ -1256,7 +1256,7 @@ public sealed class OpResultUsageAnalyzerTests
             {
                 public static OpResult<User> LoadUser(bool found) => found
                     ? OpResults.Ok(new User(1))
-                    : OpResults.Err<User>("not found");
+                    : OpResults.Err("not found");
 
                 public static void Run()
                 {
@@ -1451,7 +1451,7 @@ public sealed class OpResultUsageAnalyzerTests
             var result = LoadUser(found: false);
             if (result.IsErr)
             {
-                OpResult<User> wrapped = OpResults.Err<User>(result.Error.Message);
+                OpResult<User> wrapped = OpResults.Err(result.Error.Message);
                 _ = wrapped;
             }
             """);
