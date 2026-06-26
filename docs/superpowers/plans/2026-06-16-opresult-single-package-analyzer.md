@@ -464,12 +464,12 @@ Update `OpResult.Analyzers/OpResultSemanticFacts.cs` so it can:
   - `if (!result.IsOk) { result.Error; }`
   - `else` inverse branches.
   - early-return guards in the same block, including harmless statements between the guard and access.
-  - loop-local `continue` guards that skip the current unsafe branch.
+  - loop-local `continue` / `break` guards that skip the current unsafe branch.
 - Invalidate a proof when a reaching write changes the same receiver after the proof. Writes include assignment, deconstruction, and `ref` / `out` arguments.
 - Invalidate early-exit proofs when the continuing branch writes the same receiver before the later access.
 - Do not invalidate a proof for sibling member writes such as `holder.Other = 1` after guarding `holder.Cached`.
-- Do not invalidate a proof for writes on paths that exit before the access with `return`, `throw`, or a `continue` that skips the current loop iteration.
-- Preserve short-circuit direction: later right-side guards can prove the post-left-mutation value, while later right-side writes invalidate earlier left-side proofs.
+- Do not invalidate a proof for writes on paths that exit before the access with `return`, `throw`, or a `continue` / `break` that skips the access.
+- Preserve short-circuit direction: later right-side guards can prove the post-left-mutation value, while later right-side same-function-boundary writes invalidate earlier left-side proofs.
 - Let later operands in a C# short-circuit condition use facts proven by earlier operands, while still invalidating those facts for writes that occur before the guarded access.
 - Do not expand collection / indexer receiver identity in this PR; property references with arguments are untrackable so a `results[0]` guard cannot prove `results[1]`.
 
@@ -900,6 +900,7 @@ Report `OPRESULT005` when:
 - Target method is `OpResult.OpResults.Err` or generic `OpResult.OpResults.Err<T>`.
 - The invocation has exactly one argument, or has two arguments where the inner-error argument is a null constant.
 - That argument is direct `result.Error.Message`.
+- Arguments are matched by target parameter, not source order, so reordered named arguments are covered.
 - The `result.Error` access is proven to be in an `Err` branch by the same local proof helper used for `OPRESULT002`.
 
 Do not report:

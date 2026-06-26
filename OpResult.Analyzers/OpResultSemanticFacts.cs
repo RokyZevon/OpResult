@@ -1029,8 +1029,8 @@ internal static class OpResultSemanticFacts
         return operation is IReturnOperation
             || operation is IThrowOperation
             || (operation is IBranchOperation branch
-                && branch.BranchKind == BranchKind.Continue
-                && DoesContinueSkipAccess(branch, accessOperation));
+                && ((branch.BranchKind == BranchKind.Continue && DoesContinueSkipAccess(branch, accessOperation))
+                    || (branch.BranchKind == BranchKind.Break && DoesBreakSkipAccess(branch, accessOperation))));
     }
 
     private static bool HasInvalidatingWriteBeforeAccess(
@@ -1090,8 +1090,15 @@ internal static class OpResultSemanticFacts
 
     private static bool ContainsInvalidatingWrite(IOperation operation, OpResultReceiverKey receiverKey)
     {
+        var functionBoundary = GetContainingFunctionBoundary(operation);
+
         foreach (var descendant in EnumerateOperations(operation))
         {
+            if (!HasSameFunctionBoundary(descendant, functionBoundary))
+            {
+                continue;
+            }
+
             if (IsInvalidatingWrite(descendant, receiverKey))
             {
                 return true;
@@ -1183,6 +1190,14 @@ internal static class OpResultSemanticFacts
             && branch.Syntax.SpanStart < accessOperation.Syntax.SpanStart;
     }
 
+    private static bool DoesBreakSkipAccess(IBranchOperation branch, IOperation accessOperation)
+    {
+        var breakTargetSyntax = GetContainingBreakTargetSyntax(branch.Syntax);
+        return breakTargetSyntax is not null
+            && breakTargetSyntax.Span.Contains(accessOperation.Syntax.SpanStart)
+            && branch.Syntax.SpanStart < accessOperation.Syntax.SpanStart;
+    }
+
     private static SyntaxNode? GetContainingLoopSyntax(SyntaxNode syntax)
     {
         for (var current = syntax.Parent; current is not null; current = current.Parent)
@@ -1192,6 +1207,24 @@ internal static class OpResultSemanticFacts
                 or ForEachVariableStatementSyntax
                 or WhileStatementSyntax
                 or DoStatementSyntax)
+            {
+                return current;
+            }
+        }
+
+        return null;
+    }
+
+    private static SyntaxNode? GetContainingBreakTargetSyntax(SyntaxNode syntax)
+    {
+        for (var current = syntax.Parent; current is not null; current = current.Parent)
+        {
+            if (current is ForStatementSyntax
+                or ForEachStatementSyntax
+                or ForEachVariableStatementSyntax
+                or WhileStatementSyntax
+                or DoStatementSyntax
+                or SwitchStatementSyntax)
             {
                 return current;
             }

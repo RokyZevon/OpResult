@@ -131,9 +131,9 @@ Use(result.Value);
 
 `OnOk` / `OnErr` 是副作用 API，不改变调用点之后的控制流事实。
 
-Analyzer 只把同一个 receiver expression 上的 guard 当作证明。`first.Cached.IsOk` 不能证明 `second.Cached.Value`，同一对象上的 sibling member 写入也不能使已证明的 `holder.Cached` guard 失效。若 guard 后存在能到达读取点的 `ref` / `out` / assignment / deconstruction 写入，则该证明失效；这包括 early-exit guard 的 continuing branch 中的写入。若写入所在路径在读取前通过 `return`、`throw` 或同一 loop iteration 的 `continue` 离开，则不使后续可达读取失效。
+Analyzer 只把同一个 receiver expression 上的 guard 当作证明。`first.Cached.IsOk` 不能证明 `second.Cached.Value`，同一对象上的 sibling member 写入也不能使已证明的 `holder.Cached` guard 失效。若 guard 后存在能到达读取点的 `ref` / `out` / assignment / deconstruction 写入，则该证明失效；这包括 early-exit guard 的 continuing branch 中的写入。若写入所在路径在读取前通过 `return`、`throw` 或同一 loop iteration 的 `continue` / `break` 离开，则不使后续可达读取失效。
 
-Analyzer 也允许同一个短路条件中后续 operand 的安全读取，例如 `if (result.IsOk && result.Value.Id > 0) { }` 与 `if (result.IsOk || result.Error.Message.Length > 0) { }`。该支持只适用于 C# 短路 `&&` / `||` 的求值顺序；如果读取前已有可达写入改变同一个 result，则 guard 证明失效。
+Analyzer 也允许同一个短路条件中后续 operand 的安全读取，例如 `if (result.IsOk && result.Value.Id > 0) { }` 与 `if (result.IsOk || result.Error.Message.Length > 0) { }`。该支持只适用于 C# 短路 `&&` / `||` 的求值顺序；如果读取前已有同一函数边界内的可达写入改变同一个 result，则 guard 证明失效，右侧 lambda / local function 中捕获的未来写入不使当前 access 前的证明失效。
 
 Analyzer 识别显式 bool guard 写法和 property-pattern guard 写法，例如 `result.IsOk == true`、`result.IsErr is false` 与 `result is { IsOk: true }`。
 
@@ -207,7 +207,7 @@ if (result.IsErr)
 }
 ```
 
-如果调用 nullable-inner overload 但显式传入 null inner error，例如 `OpResults.Err(result.Error.Message, null)`，也按同一类直接 message rebuild 处理。
+如果调用 nullable-inner overload 但显式传入 null inner error，例如 `OpResults.Err(result.Error.Message, null)` 或 `OpResults.Err(innerError: null, message: result.Error.Message)`，也按同一类直接 message rebuild 处理。Analyzer 按目标参数匹配 `message` / `innerError`，不依赖 named argument 的源码顺序。
 
 推荐写法：
 
