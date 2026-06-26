@@ -171,19 +171,41 @@ public sealed class OpResultUsageAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
+        var messageArgumentOperation = GetArgumentForParameter(invocation, "message");
+        if (messageArgumentOperation is null)
+        {
+            return false;
+        }
+
         if (invocation.Arguments.Length == 1)
         {
-            messageArgument = invocation.Arguments[0].Value;
+            messageArgument = messageArgumentOperation.Value;
             return true;
         }
 
-        if (invocation.Arguments.Length == 2 && IsNullConstant(invocation.Arguments[1].Value))
+        var innerErrorArgumentOperation = GetArgumentForParameter(invocation, "innerError");
+        if (invocation.Arguments.Length == 2
+            && innerErrorArgumentOperation is not null
+            && IsNullConstant(innerErrorArgumentOperation.Value))
         {
-            messageArgument = invocation.Arguments[0].Value;
+            messageArgument = messageArgumentOperation.Value;
             return true;
         }
 
         return false;
+    }
+
+    private static IArgumentOperation? GetArgumentForParameter(IInvocationOperation invocation, string parameterName)
+    {
+        foreach (var argument in invocation.Arguments)
+        {
+            if (argument.Parameter?.Name == parameterName)
+            {
+                return argument;
+            }
+        }
+
+        return null;
     }
 
     private static bool IsOpResultsErrMethod(IInvocationOperation invocation, Compilation compilation)

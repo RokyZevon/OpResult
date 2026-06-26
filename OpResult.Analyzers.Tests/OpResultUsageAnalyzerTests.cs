@@ -455,6 +455,27 @@ public sealed class OpResultUsageAnalyzerTests
     }
 
     [Fact]
+    public async Task ValueAccess_AfterCapturedRightSideLambdaWrite_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: true);
+            if (result.IsOk && Register(() => { result = LoadUser(found: false); }))
+            {
+                _ = result.Value;
+            }
+
+            bool Register(global::System.Action callback)
+            {
+                _ = callback;
+                return true;
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
     public async Task ValueAccess_AfterLeftSideMutationAndRightSideIsOkGuard_DoesNotReportDiagnostic()
     {
         var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
@@ -723,6 +744,26 @@ public sealed class OpResultUsageAnalyzerTests
                 if (result.IsErr)
                 {
                     continue;
+                }
+
+                _ = result.Value;
+            }
+            """);
+
+        AnalyzerTestHost.AssertNoDiagnostic(diagnostics, DiagnosticIds.UnguardedValueAccess);
+    }
+
+    [Fact]
+    public async Task ValueAccess_AfterIsErrBreakGuardInLoop_DoesNotReportDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: true);
+            for (var i = 0; i < 1; i++)
+            {
+                if (result.IsErr)
+                {
+                    break;
                 }
 
                 _ = result.Value;
@@ -1457,6 +1498,21 @@ public sealed class OpResultUsageAnalyzerTests
             if (result.IsErr)
             {
                 _ = OpResults.Err(result.Error.Message, null);
+            }
+            """);
+
+        AnalyzerTestHost.AssertDiagnostic(diagnostics, DiagnosticIds.DirectErrorChainLoss);
+    }
+
+    [Fact]
+    public async Task DirectErrorMessageRebuildWithReorderedNamedNullInner_ReportsChainLossDiagnostic()
+    {
+        var diagnostics = await AnalyzerTestHost.GetDiagnosticsAsync(
+            """
+            var result = LoadUser(found: false);
+            if (result.IsErr)
+            {
+                _ = OpResults.Err(innerError: null, message: result.Error.Message);
             }
             """);
 
