@@ -57,21 +57,31 @@ public class OpResultTests
             genericArity: 0,
             method => method.ReturnType == typeof(OpError));
 
-        var errWithValue = FindOpResultsFactoryMethod(
+        var errWithInnerError = FindOpResultsFactoryMethod(
             nameof(OpResults.Err),
-            parameterCount: 1,
-            genericArity: 1,
-            method => IsOpResultOfMethodGenericParameter(method.ReturnType, method.GetGenericArguments().Single()));
+            parameterCount: 2,
+            genericArity: 0,
+            method => method.ReturnType == typeof(OpError));
+
+        var genericErrFactories = typeof(OpResults)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(method =>
+                method.Name == nameof(OpResults.Err) &&
+                method.GetGenericArguments().Length > 0)
+            .ToArray();
 
         var okValueParameter = okWithValue.GetParameters().Single();
         var errMessageParameter = errWithoutValue.GetParameters().Single();
-        var errValueMessageParameter = errWithValue.GetParameters().Single();
+        var innerErrorParameters = errWithInnerError.GetParameters();
 
         Assert.NotNull(okWithoutValue);
         Assert.Equal(typeof(OpError), errWithoutValue.ReturnType);
+        Assert.Equal(typeof(OpError), errWithInnerError.ReturnType);
+        Assert.Empty(genericErrFactories);
         Assert.True(HasDisallowNullAttribute(okValueParameter));
         Assert.True(IsNullableAnnotated(errMessageParameter));
-        Assert.True(IsNullableAnnotated(errValueMessageParameter));
+        Assert.True(IsNullableAnnotated(innerErrorParameters[0]));
+        Assert.True(IsNullableAnnotated(innerErrorParameters[1]));
     }
 
     [Fact]
@@ -93,14 +103,8 @@ public class OpResultTests
     [Fact]
     public void ErrBranch_ValueFallbackReturnsDefaultWithoutThrow()
     {
-        var errFactory = FindOpResultsFactoryMethod(
-            nameof(OpResults.Err),
-            parameterCount: 1,
-            genericArity: 1,
-            method => IsOpResultOfMethodGenericParameter(method.ReturnType, method.GetGenericArguments().Single()));
-
-        var errInt = (OpResult<int>)errFactory.MakeGenericMethod(typeof(int)).Invoke(null, new object?[] { "failed" })!;
-        var errString = (OpResult<string>)errFactory.MakeGenericMethod(typeof(string)).Invoke(null, new object?[] { "failed" })!;
+        OpResult<int> errInt = OpResults.Err("failed");
+        OpResult<string> errString = OpResults.Err("failed");
 
         var intReadException = Record.Exception(() => _ = errInt.Value);
         var stringReadException = Record.Exception(() => _ = errString.Value);

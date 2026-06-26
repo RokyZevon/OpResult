@@ -145,8 +145,6 @@ OpResult<User> FindUser(Guid id)
 }
 ```
 
-`OpResults.Err<T>(...)` 仍作为显式兼容写法保留；新代码推荐使用 `OpResults.Err(...)`，由目标 result 类型完成转换。
-
 non-null 的 `T` 也可以直接作为成功的 `OpResult<T>` 返回：
 
 ```csharp

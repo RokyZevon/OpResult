@@ -38,16 +38,6 @@ public static class OpResults
     /// <returns>An error that can be converted to a failed result.</returns>
     public static OpError Err(string? message, OpError? innerError) => OpError.New(message, innerError);
 
-    /// <summary>
-    /// Creates a failed result with success value type <typeparamref name="T"/>.
-    /// </summary>
-    /// <typeparam name="T">The type of the value carried by a successful result.</typeparam>
-    /// <param name="message">The error message. <see langword="null"/> or whitespace messages are normalized to an empty string at run time.</param>
-    /// <returns>A failed result.</returns>
-    public static OpResult<T> Err<T>(string? message)
-        where T : notnull =>
-        OpResult<T>.Err(OpError.New(message));
-
     private const string NullOperationResultMessage = "Operation returned null.";
 
     /// <summary>
@@ -92,7 +82,7 @@ public static class OpResults
         try
         {
             var value = func();
-            return value is null ? Err<T>(NullOperationResultMessage) : Ok(value);
+            return value is null ? Err(NullOperationResultMessage) : Ok(value);
         }
         catch (OperationCanceledException)
         {
@@ -154,11 +144,11 @@ public static class OpResults
             var task = func();
             if (task is null)
             {
-                return Err<T>(NullOperationResultMessage);
+                return Err(NullOperationResultMessage);
             }
 
             var value = await task.ConfigureAwait(false);
-            return value is null ? Err<T>(NullOperationResultMessage) : Ok(value);
+            return value is null ? Err(NullOperationResultMessage) : Ok(value);
         }
         catch (OperationCanceledException)
         {

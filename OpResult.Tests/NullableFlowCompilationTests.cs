@@ -44,7 +44,7 @@ public class NullableFlowCompilationTests
     {
         var diagnostics = CompileSnippet(
             """
-            var result = OpResults.Err<User>("failed");
+            OpResult<User> result = OpResults.Err("failed");
             if (!result.IsErr) return;
             var message = result.Error.Message;
             _ = message;
@@ -58,7 +58,7 @@ public class NullableFlowCompilationTests
     {
         var diagnostics = CompileSnippet(
             """
-            var result = OpResults.Err<User>("failed");
+            OpResult<User> result = OpResults.Err("failed");
             if (result.IsOk) return;
             var message = result.Error.Message;
             _ = message;
@@ -72,7 +72,7 @@ public class NullableFlowCompilationTests
     {
         var diagnostics = CompileSnippet(
             """
-            var result = OpResults.Err<User>("failed");
+            OpResult<User> result = OpResults.Err("failed");
             var id = result.Value.Id;
             _ = id;
             """);

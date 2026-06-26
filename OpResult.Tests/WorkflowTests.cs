@@ -184,7 +184,7 @@ public class WorkflowTests
         Assert.Equal(11, voidToValueOkResult.Value);
 
         var thenValueToValue = thenValueToValueDefinition.MakeGenericMethod(typeof(int), typeof(string));
-        var errForValueToValue = OpResults.Err<int>("value-to-value short-circuit");
+        OpResult<int> errForValueToValue = OpResults.Err("value-to-value short-circuit");
         var valueToValueCalled = false;
         Func<int, OpResult<string>> valueToValueContinuation = value =>
         {
@@ -210,7 +210,7 @@ public class WorkflowTests
         Assert.Equal("ok-4", valueToValueOkResult.Value);
 
         var thenValueToVoid = thenValueToVoidDefinition.MakeGenericMethod(typeof(int));
-        var errForValueToVoid = OpResults.Err<int>("value-to-void short-circuit");
+        OpResult<int> errForValueToVoid = OpResults.Err("value-to-void short-circuit");
         var valueToVoidCalled = false;
         Func<int, OpResult> valueToVoidContinuation = value =>
         {
@@ -544,7 +544,7 @@ public class WorkflowTests
 
         var valueToValueErrResult = await InvokeWorkflowAsync<OpResult<string>>(
             thenAsyncTaskValueToValue,
-            Task.FromResult(OpResults.Err<int>("task-value-to-value short-circuit")),
+            Task.FromResult<OpResult<int>>(OpResults.Err("task-value-to-value short-circuit")),
             valueToValueContinuation);
 
         Assert.False(valueToValueErrCalled);
@@ -578,7 +578,7 @@ public class WorkflowTests
 
         var valueToVoidErrResult = await InvokeWorkflowAsync<OpResult>(
             thenAsyncTaskValueToVoid,
-            Task.FromResult(OpResults.Err<int>("task-value-to-void short-circuit")),
+            Task.FromResult<OpResult<int>>(OpResults.Err("task-value-to-void short-circuit")),
             valueToVoidContinuation);
 
         Assert.False(valueToVoidErrCalled);
@@ -898,7 +898,7 @@ public class WorkflowTests
         Assert.Equal(okValueInput, okValueReturned);
 
         var onOkValueErrCalled = 0;
-        var errValueInput = OpResults.Err<int>("onok-value");
+        OpResult<int> errValueInput = OpResults.Err("onok-value");
         Action<int> onOkValueErrAction = value => onOkValueErrCalled++;
         var errValueReturned = InvokeWorkflow<OpResult<int>>(onOkValue, errValueInput, onOkValueErrAction);
         Assert.Equal(0, onOkValueErrCalled);
@@ -935,7 +935,7 @@ public class WorkflowTests
             Assert.Equal("onerr-value", error.Message);
             onErrValueErrCalled++;
         };
-        var onErrValueErrInput = OpResults.Err<int>("onerr-value");
+        OpResult<int> onErrValueErrInput = OpResults.Err("onerr-value");
         var onErrValueErrReturned = InvokeWorkflow<OpResult<int>>(onErrValue, onErrValueErrInput, onErrValueErrAction);
         Assert.Equal(1, onErrValueErrCalled);
         Assert.Equal(onErrValueErrInput, onErrValueErrReturned);
@@ -1016,7 +1016,7 @@ public class WorkflowTests
             onOkAsyncTaskValueErrCalled++;
             return Task.CompletedTask;
         };
-        var onOkAsyncTaskValueErrInput = OpResults.Err<int>("onokasync-task-value");
+        OpResult<int> onOkAsyncTaskValueErrInput = OpResults.Err("onokasync-task-value");
         var onOkAsyncTaskValueErrReturned = await InvokeWorkflowAsync<OpResult<int>>(
             onOkAsyncTaskValue,
             Task.FromResult(onOkAsyncTaskValueErrInput),
@@ -1046,7 +1046,7 @@ public class WorkflowTests
             onErrAsyncTaskValueErrCalled++;
             return Task.CompletedTask;
         };
-        var onErrAsyncTaskValueErrInput = OpResults.Err<int>("onerrasync-task-value");
+        OpResult<int> onErrAsyncTaskValueErrInput = OpResults.Err("onerrasync-task-value");
         var onErrAsyncTaskValueErrReturned = await InvokeWorkflowAsync<OpResult<int>>(
             onErrAsyncTaskValue,
             Task.FromResult(onErrAsyncTaskValueErrInput),
@@ -1364,7 +1364,7 @@ public class WorkflowTests
         var matchValueFoldOk = InvokeWorkflow<string>(matchValueFold, OpResults.Ok(3), onOkValueFold, onErrValueFold);
         Assert.Equal("ok-3", matchValueFoldOk);
 
-        var matchValueFoldErr = InvokeWorkflow<string>(matchValueFold, OpResults.Err<int>("value-fold"), onOkValueFold, onErrValueFold);
+        var matchValueFoldErr = InvokeWorkflow<string>(matchValueFold, (OpResult<int>)OpResults.Err("value-fold"), onOkValueFold, onErrValueFold);
         Assert.Equal("err-value-fold", matchValueFoldErr);
 
         var matchValueAction = matchValueActionDefinition.MakeGenericMethod(typeof(int));
@@ -1377,7 +1377,7 @@ public class WorkflowTests
         Assert.Equal(1, matchValueOnOkCalled);
         Assert.Equal(0, matchValueOnErrCalled);
 
-        InvokeWorkflow(matchValueAction, OpResults.Err<int>("value-action"), onOkValueAction, onErrValueAction);
+        InvokeWorkflow(matchValueAction, (OpResult<int>)OpResults.Err("value-action"), onOkValueAction, onErrValueAction);
         Assert.Equal(1, matchValueOnOkCalled);
         Assert.Equal(1, matchValueOnErrCalled);
 
@@ -1426,7 +1426,7 @@ public class WorkflowTests
 
         var matchAsyncTaskValueFoldErr = await InvokeWorkflowAsync<string>(
             matchAsyncTaskValueFold,
-            Task.FromResult(OpResults.Err<int>("matchasync-value")),
+            Task.FromResult<OpResult<int>>(OpResults.Err("matchasync-value")),
             onOkAsyncValueFold,
             onErrAsyncValueFold);
 
