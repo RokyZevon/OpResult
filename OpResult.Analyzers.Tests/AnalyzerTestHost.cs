@@ -39,19 +39,33 @@ internal static class AnalyzerTestHost
         return await GetDiagnosticsForSourceAsync(source);
     }
 
-    public static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsForSourceAsync(string source)
+    public static Task<ImmutableArray<Diagnostic>> GetDiagnosticsForSourceAsync(string source) =>
+        GetDiagnosticsForSourceAsync(source, ImmutableArray.Create<DiagnosticAnalyzer>(new OpResultUsageAnalyzer()));
+
+    public static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsForSourceAsync(
+        string source,
+        ImmutableArray<DiagnosticAnalyzer> analyzers,
+        ImmutableDictionary<string, ReportDiagnostic>? diagnosticOptions = null,
+        string sourcePath = "",
+        bool allowCompilationErrors = false,
+        bool includeOpResultReference = true,
+        string assemblyName = "OpResultAnalyzerProbe",
+        CancellationToken cancellationToken = default)
     {
-        var compilation = CreateCompilation(source);
-        var compilationDiagnostics = compilation.GetDiagnostics();
-        var errors = compilationDiagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error).ToArray();
-        Assert.True(
-            errors.Length == 0,
-            $"Expected probe source to compile, but found errors:{Environment.NewLine}{string.Join(Environment.NewLine, errors.Select(diagnostic => diagnostic.ToString()))}");
+        var compilation = CreateCompilation(source, diagnosticOptions, sourcePath, includeOpResultReference, assemblyName);
+        var errors = compilation.GetDiagnostics(cancellationToken).Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error).ToArray();
+        if (allowCompilationErrors)
+        {
+            Assert.NotEmpty(errors);
+        }
+        else
+        {
+            Assert.True(
+                errors.Length == 0,
+                $"Expected probe source to compile, but found errors:{Environment.NewLine}{string.Join(Environment.NewLine, errors.Select(diagnostic => diagnostic.ToString()))}");
+        }
 
-        var analyzer = new OpResultUsageAnalyzer();
-        var compilationWithAnalyzers = compilation.WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(analyzer));
-
-        return await compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync();
+        return await compilation.WithAnalyzers(analyzers).GetAnalyzerDiagnosticsAsync(cancellationToken);
     }
 
     public static void AssertDiagnostic(ImmutableArray<Diagnostic> diagnostics, string diagnosticId)
@@ -64,25 +78,37 @@ internal static class AnalyzerTestHost
         Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Id == diagnosticId);
     }
 
-    private static CSharpCompilation CreateCompilation(string source)
+    private static CSharpCompilation CreateCompilation(
+        string source,
+        ImmutableDictionary<string, ReportDiagnostic>? diagnosticOptions,
+        string sourcePath,
+        bool includeOpResultReference,
+        string assemblyName)
     {
         return CSharpCompilation.Create(
-            assemblyName: "OpResultAnalyzerProbe",
-            syntaxTrees: [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Latest))],
-            references: GetMetadataReferences(),
+            assemblyName: assemblyName,
+            syntaxTrees: [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Latest), path: sourcePath)],
+            references: GetMetadataReferences(includeOpResultReference),
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable,
-                warningLevel: 9999));
+                warningLevel: 9999,
+                specificDiagnosticOptions: diagnosticOptions));
     }
 
-    private static MetadataReference[] GetMetadataReferences()
+    private static MetadataReference[] GetMetadataReferences(bool includeOpResultReference)
     {
         var trustedAssemblies = (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string)?
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries) ?? [];
 
         var references = new List<MetadataReference>(trustedAssemblies.Length + 1);
         var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var opResultAssemblyPath = typeof(OpResults).Assembly.Location;
+        if (!includeOpResultReference)
+        {
+            seenPaths.Add(opResultAssemblyPath);
+        }
+
         foreach (var assemblyPath in trustedAssemblies)
         {
             if (seenPaths.Add(assemblyPath))
@@ -91,7 +117,6 @@ internal static class AnalyzerTestHost
             }
         }
 
-        var opResultAssemblyPath = typeof(OpResults).Assembly.Location;
         if (seenPaths.Add(opResultAssemblyPath))
         {
             references.Add(MetadataReference.CreateFromFile(opResultAssemblyPath));

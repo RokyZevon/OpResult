@@ -8,6 +8,11 @@ public static class OpResultExtensions
     /// <summary>
     /// Continues with a result-producing step after a successful result without a value, and short-circuits on failure.
     /// </summary>
+    /// <remarks>
+    /// Callers SHOULD use a flat chain of synchronous <c>Then</c> calls when each step only needs the preceding successful value.
+    /// When supplied as an anonymous callback, this continuation SHOULD NOT directly return another synchronous <c>Then</c> chain.
+    /// See the <see href="https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.md">Then usage requirements</see> for keyword definitions, exceptions, and the scope of OPRESULT006.
+    /// </remarks>
     /// <param name="result">The result to inspect.</param>
     /// <param name="onOk">The continuation to run on success.</param>
     /// <returns>The continuation result, or the original failure error.</returns>
@@ -21,6 +26,11 @@ public static class OpResultExtensions
     /// <summary>
     /// Continues with a value-result-producing step after a successful result without a value, and short-circuits on failure.
     /// </summary>
+    /// <remarks>
+    /// Callers SHOULD use a flat chain of synchronous <c>Then</c> calls when each step only needs the preceding successful value.
+    /// When supplied as an anonymous callback, this continuation SHOULD NOT directly return another synchronous <c>Then</c> chain.
+    /// See the <see href="https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.md">Then usage requirements</see> for keyword definitions, exceptions, and the scope of OPRESULT006.
+    /// </remarks>
     /// <typeparam name="T">The type of the value carried by the continuation result.</typeparam>
     /// <param name="result">The result to inspect.</param>
     /// <param name="onOk">The continuation to run on success.</param>
@@ -36,6 +46,11 @@ public static class OpResultExtensions
     /// <summary>
     /// Continues with a step that maps a successful value to a new value result, and short-circuits on failure.
     /// </summary>
+    /// <remarks>
+    /// Callers SHOULD use a flat chain of synchronous <c>Then</c> calls when each step only needs the preceding successful value.
+    /// When supplied as an anonymous callback, this continuation SHOULD NOT directly return another synchronous <c>Then</c> chain.
+    /// See the <see href="https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.md">Then usage requirements</see> for keyword definitions, exceptions, and the scope of OPRESULT006.
+    /// </remarks>
     /// <typeparam name="T">The type of the value carried by the current successful result.</typeparam>
     /// <typeparam name="TNext">The type of the value carried by the continuation result.</typeparam>
     /// <param name="result">The result to inspect.</param>
@@ -53,6 +68,11 @@ public static class OpResultExtensions
     /// <summary>
     /// Continues with a result-producing step after a successful value result, and short-circuits on failure.
     /// </summary>
+    /// <remarks>
+    /// Callers SHOULD use a flat chain of synchronous <c>Then</c> calls when each step only needs the preceding successful value.
+    /// When supplied as an anonymous callback, this continuation SHOULD NOT directly return another synchronous <c>Then</c> chain.
+    /// See the <see href="https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.md">Then usage requirements</see> for keyword definitions, exceptions, and the scope of OPRESULT006.
+    /// </remarks>
     /// <typeparam name="T">The type of the value carried by the current successful result.</typeparam>
     /// <param name="result">The result to inspect.</param>
     /// <param name="onOk">The continuation to run on success.</param>

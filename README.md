@@ -28,8 +28,11 @@ OpResult includes analyzer diagnostics for the core result-flow rules:
 - `OPRESULT003`: use `IsOk` / `IsErr`, not null or empty-message pseudo branch tests.
 - `OPRESULT004`: consume returned `OpResult` values.
 - `OPRESULT005`: preserve `OpError` chains with `ToErr` or `OpResults.Err(message, innerError)`.
+- `OPRESULT006`: prefer flat synchronous `Then` chains; see the [Then usage requirements](https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.md).
 
 Default severity for first-version diagnostics is `warning`.
+
+Projects that treat warnings as errors should review the [Then usage requirements](https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.md) before upgrading; it explains how to configure or locally suppress `OPRESULT006`.
 
 Bad example:
 
@@ -238,6 +241,8 @@ If every message in the chain is empty, `ToString()` returns `"<error>"`. `ToStr
 ### Chaining Steps with Then and ThenAsync
 
 Use `Then` when the next synchronous step can also fail. It runs only after an `Ok` result. If the current result is `Err`, the continuation is not called and the original `OpError` is carried forward.
+
+When each step only needs the preceding value, callers **SHOULD** use `.Then(...).Then(...)`. An anonymous success callback passed to a synchronous `Then` **SHOULD NOT** directly return another synchronous `Then` chain. When an earlier value or local error handling is needed, callers **SHOULD** extract a named business step. Keyword definitions, examples, and exceptions are in the [Then usage requirements](https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.md).
 
 ```csharp
 OpResult SuspendUser(Guid userId)
