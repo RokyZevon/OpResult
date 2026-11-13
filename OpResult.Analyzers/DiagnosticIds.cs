@@ -7,4 +7,5 @@ public static class DiagnosticIds
     public const string PseudoBranchTest = "OPRESULT003";
     public const string UnusedResultReturnValue = "OPRESULT004";
     public const string DirectErrorChainLoss = "OPRESULT005";
+    public const string NestedThen = "OPRESULT006";
 }

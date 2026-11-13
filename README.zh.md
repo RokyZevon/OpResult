@@ -28,8 +28,11 @@ OpResult 包含用于核心 result-flow 规则的 analyzer 诊断：
 - `OPRESULT003`：使用 `IsOk` / `IsErr`，不要用 null 或空消息伪分支测试。
 - `OPRESULT004`：消费返回的 `OpResult` 值。
 - `OPRESULT005`：使用 `ToErr` 或 `OpResults.Err(message, innerError)` 保留 `OpError` 链。
+- `OPRESULT006`：偏好扁平的同步 `Then` 链；详见 [Then 使用规范](https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.zh.md)。
 
 第一版 diagnostics 默认 severity 是 `warning`。
+
+如果项目把 warning 当成 error，升级前请先看 [Then 使用规范](https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.zh.md)，其中说明了如何配置或局部抑制 `OPRESULT006`。
 
 错误示例：
 
@@ -238,6 +241,8 @@ logger.LogError("{Error}", error);
 ### 使用 Then 和 ThenAsync 串联步骤
 
 当下一个同步步骤也可能失败时，使用 `Then`。它只会在当前结果为 `Ok` 时运行；如果当前结果是 `Err`，continuation 不会被调用，原始 `OpError` 会继续向后传递。
+
+每一步只依赖前一步的成功值时，调用方 **SHOULD** 使用 `.Then(...).Then(...)`。传给同步 `Then` 的匿名成功回调 **SHOULD NOT** 直接返回另一条同步 `Then` 链。需要保留早先的值或局部错误处理时，调用方 **SHOULD** 提取具名业务步骤。规范用语、示例及例外见 [Then 使用规范](https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.zh.md)。
 
 ```csharp
 OpResult SuspendUser(Guid userId)

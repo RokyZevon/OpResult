@@ -43,4 +43,13 @@ internal static class DiagnosticDescriptors
         "OpResult.Usage",
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NestedThen = new(
+        DiagnosticIds.NestedThen,
+        "Prefer flat Then chains",
+        "Prefer a flat Then chain over returning a nested Then chain.",
+        "OpResult.Usage",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        helpLinkUri: "https://github.com/RokyZevon/OpResult/blob/main/docs/then-chaining.md");
 }

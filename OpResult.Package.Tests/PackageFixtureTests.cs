@@ -93,6 +93,91 @@ public sealed class PackageFixtureTests
         }
     }
 
+    [Fact]
+    public async Task PackedPackage_NestedThenWarningSupportsSeverityConfigurationAndFlatChains()
+    {
+        var tempRoot = CreateTempRoot();
+        var passed = false;
+
+        try
+        {
+            var packagesDirectory = Path.Combine(tempRoot, "packages");
+            Directory.CreateDirectory(packagesDirectory);
+            await PackAsync(packagesDirectory);
+
+            var consumerDirectory = Path.Combine(tempRoot, "consumer");
+            Directory.CreateDirectory(consumerDirectory);
+            WriteConsumerProject(consumerDirectory, packagesDirectory);
+            var sourcePath = Path.Combine(consumerDirectory, "Program.cs");
+            var configPath = Path.Combine(consumerDirectory, ".editorconfig");
+
+            File.WriteAllText(sourcePath, """
+                using OpResult;
+
+                _ = OpResults.Ok(1).Then(first => Step(first).Then(Step));
+
+                static OpResult<int> Step(int value) => OpResults.Ok(value + 1);
+                """);
+
+            var warning = await BuildConsumerAsync(warningsAsErrors: false);
+            Assert.True(warning.ExitCode == 0, warning.ToString());
+            Assert.Contains("warning OPRESULT006", warning.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("AD0001", warning.ToString(), StringComparison.Ordinal);
+
+            var error = await BuildConsumerAsync(warningsAsErrors: true);
+            Assert.True(error.ExitCode != 0, error.ToString());
+            Assert.Contains("error OPRESULT006", error.ToString(), StringComparison.Ordinal);
+
+            File.WriteAllText(configPath, """
+                root = true
+
+                [*.cs]
+                dotnet_diagnostic.OPRESULT006.severity = none
+                """);
+
+            var suppressed = await BuildConsumerAsync(warningsAsErrors: true);
+            Assert.True(suppressed.ExitCode == 0, suppressed.ToString());
+            Assert.DoesNotContain("OPRESULT006", suppressed.ToString(), StringComparison.Ordinal);
+
+            // Suppressing the new rule must not disable the existing usage analyzer.
+            WriteConsumerSource(consumerDirectory);
+            var existingRule = await BuildConsumerAsync(warningsAsErrors: false);
+            Assert.True(existingRule.ExitCode == 0, existingRule.ToString());
+            Assert.Contains("warning OPRESULT002", existingRule.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("OPRESULT006", existingRule.ToString(), StringComparison.Ordinal);
+
+            File.WriteAllText(configPath, """
+                root = true
+
+                [*.cs]
+                dotnet_diagnostic.OPRESULT006.severity = warning
+                """);
+            File.WriteAllText(sourcePath, """
+                using OpResult;
+
+                _ = OpResults.Ok(1).Then(Step).Then(Step);
+
+                static OpResult<int> Step(int value) => OpResults.Ok(value + 1);
+                """);
+
+            var flat = await BuildConsumerAsync(warningsAsErrors: true);
+            Assert.True(flat.ExitCode == 0, flat.ToString());
+            Assert.DoesNotContain("OPRESULT006", flat.ToString(), StringComparison.Ordinal);
+            passed = true;
+
+            // A relative project path keeps source and EditorConfig paths consistent when
+            // the temporary directory has a symlinked ancestor (e.g. /var on macOS).
+            Task<CommandResult> BuildConsumerAsync(bool warningsAsErrors) => RunDotnetInDirectoryAsync(
+                consumerDirectory, "build", "Consumer.csproj", "-c", "Release", "-t:Rebuild",
+                "-p:LangVersion=10.0",
+                $"-p:TreatWarningsAsErrors={warningsAsErrors.ToString().ToLowerInvariant()}");
+        }
+        finally
+        {
+            CleanupIfPassed(tempRoot, passed);
+        }
+    }
+
     private static async Task PackAsync(string packagesDirectory)
     {
         AssertReleaseConfiguration(GetAssemblyConfiguration());
@@ -210,12 +295,15 @@ public sealed class PackageFixtureTests
         Assert.Empty(dependencies);
     }
 
-    private static async Task<CommandResult> RunDotnetAsync(params string[] arguments)
+    private static Task<CommandResult> RunDotnetAsync(params string[] arguments) =>
+        RunDotnetInDirectoryAsync(GetRepositoryRoot(), arguments);
+
+    private static async Task<CommandResult> RunDotnetInDirectoryAsync(string directory, params string[] arguments)
     {
         var startInfo = new ProcessStartInfo
         {
             FileName = "dotnet",
-            WorkingDirectory = GetRepositoryRoot(),
+            WorkingDirectory = directory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
